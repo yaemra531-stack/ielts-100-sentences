@@ -1,4 +1,5 @@
-import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-3';
+import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-4';
+import {createFeedback} from './feedback.js?v=20261003-4';
 
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
@@ -22,6 +23,25 @@ $('theme-toggle').addEventListener('click',() => {
 });
 systemTheme.addEventListener('change',() => { if (!themeChoice) applyTheme(); });
 applyTheme();
+const FEEDBACK_KEY = 'ielts100.feedback.v1';
+const feedback = createFeedback();
+let feedbackEnabled = true;
+try { feedbackEnabled = localStorage.getItem(FEEDBACK_KEY) !== 'off'; } catch {}
+function applyFeedbackPreference() {
+  feedback.setEnabled(feedbackEnabled);
+  $('feedback-toggle').checked = feedbackEnabled;
+  document.querySelectorAll('[data-feedback-sound]').forEach(button => { button.disabled = !feedbackEnabled; });
+  if (!feedbackEnabled) $('feedback').classList.remove('feedback-pop');
+}
+applyFeedbackPreference();
+$('feedback-toggle').addEventListener('change',() => {
+  feedbackEnabled = $('feedback-toggle').checked;
+  try { localStorage.setItem(FEEDBACK_KEY,feedbackEnabled ? 'on' : 'off'); } catch {}
+  applyFeedbackPreference();
+});
+document.querySelectorAll('[data-feedback-sound]').forEach(button => {
+  button.addEventListener('click',() => { void feedback.play(button.dataset.feedbackSound); });
+});
 let bank, progress, customBank = false, storageOkay = true;
 const notice = (message) => { $('notice').textContent = message; $('notice').hidden = false; };
 function storageWarning() {
@@ -206,8 +226,12 @@ function showHint() {
 function checkAnswer(event) {
   event?.preventDefault();
   if (!progress?.active || progress.active.result) return;
-  submit(bank, progress, $('answer').value);
+  const answer = $('answer').value;
+  const result = submit(bank, progress, answer);
+  // Start audio in this user gesture, without waiting for it before rendering / moving on.
+  void feedback.play(!answer.trim() ? 'empty' : result.correct ? 'correct' : 'unmatched');
   save(); render();
+  if (feedbackEnabled && result.correct) $('feedback').classList.add('feedback-pop');
   (progress.active.result.correct ? $('next-button') : $('retry-button')).scrollIntoView({block:'nearest'});
 }
 function next() {
@@ -289,6 +313,9 @@ $('log-export').addEventListener('click',()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 window.addEventListener('storage',event=>{
+  if (event.key === FEEDBACK_KEY) {
+    feedbackEnabled = event.newValue !== 'off'; applyFeedbackPreference(); return;
+  }
   if (event.key !== STATE_KEY || !event.newValue || !progress) return;
   try {
     const incoming=JSON.parse(event.newValue);
@@ -296,7 +323,10 @@ window.addEventListener('storage',event=>{
     mergeSavedLogs(incoming.attemptLog);renderJournal();
   } catch {}
 });
-document.addEventListener('visibilitychange' ,() => { if (!document.hidden && bank && progress) renderStats(); });
+document.addEventListener('visibilitychange' ,() => {
+  if (document.hidden) feedback.stop();
+  else if (bank && progress) renderStats();
+});
 
 async function init() {
   try {
