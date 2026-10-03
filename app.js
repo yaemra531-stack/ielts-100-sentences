@@ -1,4 +1,4 @@
-import {VERSION, tokens, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit} from './core.js';
+import {VERSION, tokens, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry} from './core.js';
 
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
@@ -21,7 +21,7 @@ function save() {
 }
 function focusAction() {
   if ($('settings').open || !progress) return;
-  const element = !progress.active ? $('review-button') : progress.active.result ? $('next-button') : $('answer');
+  const element = !progress.active ? $('review-button') : progress.active.result ? (progress.active.result.correct ? $('next-button') : $('retry-button')) : $('answer');
   element.focus({preventScroll:true});
 }
 function renderStats() {
@@ -54,9 +54,14 @@ function renderSentence(element, text, marks = [], className = '') {
 }
 function renderResult(q) {
   const result = progress.active.result, record = progress.records[q.id];
-  $('feedback').className = `feedback ${result.usedHint ? 'hinted' : result.correct ? 'correct' : 'wrong'}`;
-  $('result-icon').textContent = result.correct && !result.usedHint ? '✓' : result.usedHint ? '↗' : '↺';
-  if (result.usedHint) {
+  $('feedback').className = `feedback ${result.usedHint || result.repair ? 'hinted' : result.correct ? 'correct' : 'wrong'}`;
+  $('result-icon').textContent = result.correct && !result.usedHint && !result.repair ? '✓' : result.usedHint ? '↗' : '↺';
+  $('next-button').hidden = !result.correct;
+  $('retry-button').hidden = result.correct;
+  if (result.repair) {
+    $('result-title').textContent = result.correct ? '这次写对了，继续下一句。' : '再看一下，重写本句。';
+    $('result-detail').textContent = result.correct ? '刚看过答案，这次只算订正；隔开几句后会再独立考一次。' : '看清差异后重写，写对才能进入下一句。';
+  } else if (result.usedHint) {
     $('result-title').textContent = result.correct ? '写对了，再独立试一次。' : '先记住，再凭记忆写。';
     $('result-detail').textContent = '这次用过提示，暂不计入掌握；隔开几句后会再出现。';
   } else if (result.correct) {
@@ -64,7 +69,7 @@ function renderResult(q) {
     $('result-detail').textContent = record.streak >= 2 ? '已连续两次独立答对。继续下一句。' : '独立答对 1 / 2。隔开几句后，再确认一次。';
   } else {
     $('result-title').textContent = result.answer.trim() ? '还差一点，再来一次。' : '先看答案，再试一次。';
-    $('result-detail').textContent = '连续答对次数重新计数；这句会优先回来。';
+    $('result-detail').textContent = '先看清差异，再重写本句；写对后进入下一句。';
   }
   $('your-answer-block').hidden = result.correct || !result.answer.trim();
   renderSentence($('your-answer'), result.answer, result.inputMarks, 'word-error');
@@ -76,6 +81,21 @@ function renderResult(q) {
     const green = document.createElement('span'); green.className = 'legend-green'; green.textContent = '绿色：漏写 / 应替换';
     $('diff-legend').append(red,document.createElement('br'),green);
   } else $('diff-legend').textContent = '大小写与标点不影响判分。';
+}
+function renderHistory(active) {
+  const history = active.history || [];
+  $('attempt-history').hidden = !active.result || !history.length;
+  $('attempt-history').open = false;
+  $('history-summary').textContent = `先前作答 · ${history.length} 次`;
+  $('history-list').replaceChildren();
+  history.forEach((result,index) => {
+    const item = document.createElement('div'); item.className = 'history-item';
+    const heading = document.createElement('p'); heading.className = 'answer-label'; heading.textContent = `作答记录 ${index+1}`;
+    const answer = document.createElement('p'); renderSentence(answer,result.answer || '（未填写）',result.inputMarks,'word-error');
+    const referenceLabel = document.createElement('p'); referenceLabel.className = 'answer-label'; referenceLabel.textContent = '参考答案';
+    const reference = document.createElement('p'); renderSentence(reference,result.target,result.targetMarks,'word-needed');
+    item.append(heading,answer,referenceLabel,reference); $('history-list').append(item);
+  });
 }
 function render(focus = true) {
   renderStats();
@@ -90,7 +110,7 @@ function render(focus = true) {
     $('bank-label').textContent = bank.title;
     $('question-number').textContent = `${String(index+1).padStart(2,'0')} / ${String(bank.sentences.length).padStart(2,'0')}`;
     $('chinese').textContent = q.chinese;
-    $('question-status').textContent = record.streak >= 2 ? '已掌握 · 用这一句巩固一下。' : record.streak === 1 ? '独立答对 1 / 2 · 再写对一次就掌握。' : record.errors || record.hinted ? '回炉 · 再凭记忆写一次。' : '先读中文，再凭记忆写出英文。';
+    $('question-status').textContent = active.repair ? '订正 · 凭记忆重写本句，写对后继续。' : record.streak >= 2 ? '已掌握 · 用这一句巩固一下。' : record.streak === 1 ? '独立答对 1 / 2 · 再写对一次就掌握。' : record.errors || record.hinted ? '回炉 · 再凭记忆写一次。' : '先读中文，再凭记忆写出英文。';
     const result = Boolean(active.result);
     $('answer-form').hidden = result;
     $('feedback').hidden = !result;
@@ -103,6 +123,7 @@ function render(focus = true) {
     $('hint-box').hidden = !active.hintLevel;
     $('hint-text').textContent = active.hintLevel >= 2 ? q.answers[0] : q.hint || `${tokens(q.answers[0]).slice(0,3).map(t=>t.text).join(' ')} …`;
     if (result) renderResult(q);
+    renderHistory(active);
   }
   if (focus) focusAction();
 }
@@ -116,10 +137,10 @@ function checkAnswer(event) {
   if (!progress?.active || progress.active.result) return;
   submit(bank, progress, $('answer').value);
   save(); render();
-  $('next-button').scrollIntoView({block:'nearest'});
+  (progress.active.result.correct ? $('next-button') : $('retry-button')).scrollIntoView({block:'nearest'});
 }
 function next() {
-  if (!progress?.active?.result) return;
+  if (!progress?.active?.result?.correct) return;
   activateNext(bank,progress); save(); render();
 }
 
@@ -137,6 +158,11 @@ document.addEventListener('keydown',event => {
 });
 $('hint-button').addEventListener('click',showHint);
 $('next-button').addEventListener('click',next);
+$('retry-button').addEventListener('click',() => {
+  if (!retry(progress)) return;
+  save(); render();
+  $('answer').scrollIntoView({block:'nearest'});
+});
 $('review-button').addEventListener('click',() => {
   if (!bank || !progress) return;
   progress.reviewIds = bank.sentences.map(q=>q.id); activateNext(bank,progress); save(); render();

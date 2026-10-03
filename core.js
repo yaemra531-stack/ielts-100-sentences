@@ -85,10 +85,12 @@ export function restoreProgress(bank, raw) {
   state.reviewIds = Array.isArray(raw.reviewIds) ? [...new Set(raw.reviewIds.filter(id => validIds.has(id)))] : [];
   const a = raw.active;
   if (a && validIds.has(a.id) && raw.records?.[a.id]?.signature === state.records[a.id].signature) {
-    state.active = {id: a.id, hintLevel: number(a.hintLevel,2) ? a.hintLevel : 0, draft: typeof a.draft === 'string' ? a.draft.slice(0,1000) : '', result: null};
+    state.active = {id: a.id, hintLevel: number(a.hintLevel,2) ? a.hintLevel : 0, draft: typeof a.draft === 'string' ? a.draft.slice(0,1000) : '', result: null, repair: Boolean(a.repair), history: []};
+    const q = bank.sentences.find(q => q.id === a.id);
+    if (Array.isArray(a.history)) state.active.history = a.history.slice(-20).filter(r => r && typeof r.answer === 'string').map(r => ({...grade(r.answer.slice(0,1000), q.answers), answer:r.answer.slice(0,1000), usedHint:Boolean(r.usedHint), repair:Boolean(r.repair)}));
+    if (state.active.history.length) state.active.repair = true;
     if (a.result && typeof a.result.answer === 'string') {
-      const q = bank.sentences.find(q => q.id === a.id);
-      state.active.result = {...grade(a.result.answer.slice(0,1000), q.answers), answer: a.result.answer.slice(0,1000), usedHint: Boolean(a.result.usedHint)};
+      state.active.result = {...grade(a.result.answer.slice(0,1000), q.answers), answer: a.result.answer.slice(0,1000), usedHint: Boolean(a.result.usedHint), repair: state.active.repair};
     }
   }
   return state;
@@ -111,23 +113,42 @@ export function chooseNext(bank, state) {
   return bank.sentences.filter(q => state.reviewIds.includes(q.id)).sort((a,b) => state.records[a.id].lastSeen-state.records[b.id].lastSeen)[0] || null;
 }
 export function activateNext(bank, state) {
+  if (state.active?.result && !state.active.result.correct) return null;
   const next = chooseNext(bank, state);
-  state.active = next ? {id: next.id, hintLevel: 0, draft: '', result: null} : null;
+  state.active = next ? {id: next.id, hintLevel: 0, draft: '', result: null, repair: false, history: []} : null;
   return next;
+}
+export function retry(state) {
+  const a = state.active;
+  if (!a?.result || a.result.correct) return false;
+  a.history = [...(a.history || []), a.result].slice(-20);
+  a.repair = true;
+  a.result = null;
+  a.draft = '';
+  a.hintLevel = 0;
+  return true;
 }
 export function submit(bank, state, answer, day = localDate()) {
   if (!state.active || state.active.result) return null;
   const q = bank.sentences.find(q => q.id === state.active.id);
   const r = state.records[q.id], usedHint = state.active.hintLevel > 0;
-  const result = {...grade(answer, q.answers), answer, usedHint};
+  const repair = Boolean(state.active.repair);
+  const result = {...grade(answer, q.answers), answer, usedHint, repair};
   r.attempts++;
   if (usedHint) r.hinted++;
-  if (result.correct && !usedHint) { r.streak = Math.min(2,r.streak+1); r.independentCorrect++; r.outcome = 'correct'; }
+  if (repair) {
+    // Immediate rewrites follow a revealed answer: they never earn independent mastery
+    // or advance the spaced-practice clock. The original failed turn stays due.
+    r.streak = 0;
+    if (!result.correct) r.errors++;
+  } else if (result.correct && !usedHint) { r.streak = Math.min(2,r.streak+1); r.independentCorrect++; r.outcome = 'correct'; }
   else { r.streak = 0; r.outcome = usedHint ? 'hinted' : 'wrong'; if (!result.correct) r.errors++; }
-  state.turn++;
-  r.lastSeen = state.turn;
-  r.eligibleAt = state.turn + Math.min(2,bank.sentences.length-1);
-  state.reviewIds = state.reviewIds.filter(id => id !== q.id);
+  if (!repair) {
+    state.turn++;
+    r.lastSeen = state.turn;
+    r.eligibleAt = state.turn + Math.min(2,bank.sentences.length-1);
+    state.reviewIds = state.reviewIds.filter(id => id !== q.id);
+  }
   const today = state.daily[day] || {attempts:0,ids:[]};
   today.attempts++;
   if (!today.ids.includes(q.id)) today.ids.push(q.id);

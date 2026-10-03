@@ -36,13 +36,14 @@
           <div class="result-heading"><span id="result-icon" class="result-icon"></span><div><h3 id="result-title"></h3><p id="result-detail"></p></div></div>
           <div id="your-answer-block" class="answer-block" hidden><span class="answer-label">你的答案</span><p id="your-answer"></p></div>
           <div class="answer-block"><span id="reference-label" class="answer-label">参考答案</span><p id="reference-answer"></p></div>
-          <div class="feedback-bottom"><span id="diff-legend"></span><button id="next-button" class="primary-button" type="button">下一句 <span class="button-key">↵</span></button></div>
+          <div class="feedback-bottom"><span id="diff-legend"></span><button id="retry-button" class="primary-button" type="button" hidden>重写本句 <span class="button-key">↵</span></button><button id="next-button" class="primary-button" type="button">下一句 <span class="button-key">↵</span></button></div>
         </section>
+        <details id="attempt-history" class="attempt-history" hidden><summary id="history-summary">先前作答</summary><div id="history-list"></div></details>
       </section>
       <section id="complete" class="complete-card" hidden>
         <span class="complete-mark" aria-hidden="true">✓</span><p class="eyebrow">ONE SENTENCE AT A TIME.</p><h2>这一轮，都写出来了。</h2><p id="complete-text"></p><button id="review-button" class="primary-button">再巩固一轮 <span class="button-key">↵</span></button>
       </section>
-      <div class="footnote"><span><span class="keyboard-hint">Enter 核对 / 下一句 · Shift Enter 换行</span><span class="mobile-hint">写完核对，一句接一句。</span></span><span id="save-status">进度保存在本机</span></div>
+      <div class="footnote"><span><span class="keyboard-hint">Enter 核对 / 重写 / 下一句 · Shift Enter 换行</span><span class="mobile-hint">写完核对，一句接一句。</span></span><span id="save-status">进度保存在本机</span></div>
     </main>
     <footer><span>顾家北100句 · 默写练习</span><span>不求一次记住，只求每次写实。</span></footer>
   </div>

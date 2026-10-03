@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {grade,normalize,validateBank,freshProgress,restoreProgress,activateNext,submit,masteredCount,localDate} from '../core.js';
+import {grade,normalize,validateBank,freshProgress,restoreProgress,activateNext,submit,masteredCount,localDate,retry} from '../core.js';
 const bank = validateBank({title:'Test',sentences:[
   {id:'one',chinese:'原创一',answers:['We walk home after lunch.','After lunch, we walk home.']},
   {id:'two',chinese:'原创二',answers:['She keeps a blue notebook.']},
@@ -22,7 +22,7 @@ test('diff finds missing, extra and substituted words and chooses the closest ac
 });
 test('a weak sentence returns after two intervening answers, and needs two independent successes',()=>{
   const s=freshProgress(bank);activateNext(bank,s);assert.equal(s.active.id,'one');
-  submit(bank,s,'wrong','2026-10-03');activateNext(bank,s);assert.equal(s.active.id,'two');
+  submit(bank,s,'wrong','2026-10-03');assert.equal(activateNext(bank,s),null);assert.equal(s.active.id,'one');retry(s);submit(bank,s,bank.sentences[0].answers[0],'2026-10-03');assert.equal(s.records.one.streak,0);activateNext(bank,s);assert.equal(s.active.id,'two');
   submit(bank,s,bank.sentences[1].answers[0],'2026-10-03');activateNext(bank,s);assert.equal(s.active.id,'three');
   submit(bank,s,bank.sentences[2].answers[0],'2026-10-03');activateNext(bank,s);assert.equal(s.active.id,'one');
   submit(bank,s,bank.sentences[0].answers[0],'2026-10-03');assert.equal(s.records.one.streak,1);
@@ -74,4 +74,28 @@ test('a 100-sentence bank completes without losing or starving questions',()=>{
     const q=hundred.sentences.find(q=>q.id===s.active.id);submit(hundred,s,q.answers[0],'2026-10-03');assert.ok(++tries<250);
   }
   assert.equal(masteredCount(s),100);assert.equal(s.daily['2026-10-03'].ids.length,100);
+});
+
+test('repeated corrections gate next, retain history on refresh and never count as mastery or spaced turns',()=>{
+  const s=freshProgress(bank);activateNext(bank,s);submit(bank,s,'wrong');
+  assert.equal(activateNext(bank,s),null);assert.equal(s.active.id,'one');
+  assert.equal(retry(s),true);assert.equal(s.active.draft,'');assert.equal(s.active.history.length,1);
+  s.active.draft='correction draft';let restored=restoreProgress(bank,JSON.parse(JSON.stringify(s)));
+  assert.equal(restored.active.repair,true);assert.equal(restored.active.draft,'correction draft');assert.equal(restored.active.history.length,1);
+  submit(bank,restored,'still wrong');assert.equal(activateNext(bank,restored),null);retry(restored);
+  submit(bank,restored,bank.sentences[0].answers[0]);
+  assert.equal(restored.records.one.streak,0);assert.equal(restored.records.one.independentCorrect,0);assert.equal(restored.turn,1);
+  assert.equal(restored.active.history.length,2);assert.equal(restored.daily[localDate()].attempts,3);
+  restored=restoreProgress(bank,JSON.parse(JSON.stringify(restored)));assert.equal(restored.active.result.repair,true);
+  assert.equal(retry(restored),false);assert.equal(submit(bank,restored,'anything'),null);
+  activateNext(bank,restored);assert.equal(restored.active.id,'two');assert.equal(restored.active.history.length,0);
+  submit(bank,restored,bank.sentences[1].answers[0]);activateNext(bank,restored);assert.equal(restored.active.id,'three');
+  submit(bank,restored,bank.sentences[2].answers[0]);activateNext(bank,restored);assert.equal(restored.active.id,'one');assert.equal(restored.active.repair,false);
+  submit(bank,restored,bank.sentences[0].answers[0]);assert.equal(restored.records.one.streak,1);
+});
+test('an older saved wrong result requires correction without resetting existing progress',()=>{
+  const s=freshProgress(bank);activateNext(bank,s);submit(bank,s,'wrong');s.records.two.streak=2;
+  delete s.active.repair;delete s.active.history;
+  const r=restoreProgress(bank,s);assert.equal(r.records.two.streak,2);assert.equal(r.active.result.correct,false);
+  assert.equal(activateNext(bank,r),null);assert.equal(retry(r),true);submit(bank,r,bank.sentences[0].answers[0]);assert.equal(r.records.one.streak,0);
 });
