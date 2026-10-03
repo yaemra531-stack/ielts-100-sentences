@@ -1,4 +1,4 @@
-import {VERSION, tokens, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry} from './core.js';
+import {VERSION, tokens, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry} from './core.js?v=20261003-2';
 
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
