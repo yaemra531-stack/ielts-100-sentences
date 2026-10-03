@@ -3,6 +3,25 @@ import {VERSION, tokens, validateBank, signature, localDate, freshProgress, rest
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
 const $ = id => document.getElementById(id);
+const THEME_KEY = 'ielts100.theme.v1';
+const systemTheme = matchMedia('(prefers-color-scheme: dark)');
+let themeChoice = null;
+try { const saved = localStorage.getItem(THEME_KEY); if (['light','dark'].includes(saved)) themeChoice = saved; } catch {}
+function applyTheme() {
+  const dark = (themeChoice || (systemTheme.matches ? 'dark' : 'light')) === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  $('theme-toggle').textContent = dark ? '☀' : '☾';
+  $('theme-toggle').setAttribute('aria-pressed',String(dark));
+  $('theme-toggle').setAttribute('aria-label',dark ? '切换日间模式' : '切换夜间模式');
+  $('theme-toggle').title = dark ? '切换日间模式' : '切换夜间模式';
+}
+$('theme-toggle').addEventListener('click',() => {
+  themeChoice = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY,themeChoice); } catch {}
+  applyTheme();
+});
+systemTheme.addEventListener('change',() => { if (!themeChoice) applyTheme(); });
+applyTheme();
 let bank, progress, customBank = false, storageOkay = true;
 const notice = (message) => { $('notice').textContent = message; $('notice').hidden = false; };
 function storageWarning() {

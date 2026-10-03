@@ -98,6 +98,9 @@ export function restoreProgress(bank, raw) {
 export function masteredCount(state) { return Object.values(state.records).filter(r => r.streak >= 2).length; }
 export function chooseNext(bank, state) {
   const pending = bank.sentences.filter(q => state.records[q.id].streak < 2);
+  // Complete the first pass in the supplied order before returning to weak sentences.
+  const unseen = pending.find(q => state.records[q.id].attempts === 0);
+  if (unseen) return unseen;
   const byPriority = (a,b) => {
     const ra = state.records[a.id], rb = state.records[b.id];
     const priority = r => ['wrong','hinted'].includes(r.outcome) ? 0 : r.streak === 1 ? 1 : 2;

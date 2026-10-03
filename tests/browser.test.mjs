@@ -47,11 +47,16 @@ try{
   await page.reload();await page.locator('#hint-box').waitFor({state:'visible'});assert.equal((await state()).active.hintLevel,1);
   await typeAnswer(bank.sentences[1].answers[0]);assert.equal((await state()).records['demo-02'].streak,0);assert.match(await page.locator('#result-detail').textContent(),/提示/);await next();
   await typeAnswer(bank.sentences[2].answers[0].toUpperCase().replace('.','!!!'));assert.equal((await state()).records['demo-03'].streak,1);await next();
-  assert.equal(await page.locator('#question-number').textContent(),'01 / 06');
+  assert.equal(await page.locator('#question-number').textContent(),'04 / 06');
   await page.keyboard.type('I usually');await page.reload();await page.waitForFunction(()=>document.getElementById('answer').value==='I usually');
-  assert.equal(await focused(),'answer');await page.keyboard.press('ControlOrMeta+a');await typeAnswer(bank.sentences[0].answers[1]);await next();
+  assert.equal(await focused(),'answer');await page.keyboard.press('ControlOrMeta+a');await typeAnswer(bank.sentences[3].answers[0]);await next();
   const steps=await finishRound();assert.equal(Object.values((await state()).records).filter(r=>r.streak===2).length,6);
   assert.equal(await page.locator('#today-count').textContent(),'6');await page.reload();await page.locator('#complete').waitFor({state:'visible'});assert.equal(await focused(),'review-button');
+  await page.locator('#theme-toggle').click();assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
+  await page.reload();await page.locator('#complete').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
+  await page.screenshot({path:fileURLToPath(new URL('desktop-dark.png',out)),fullPage:true});
+  await page.locator('#theme-toggle').click();assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'light');
+  await page.locator('#review-button').focus();
   // Keyboard access to the quiet settings dialog, backup, and reset.
   await page.keyboard.press('Shift+Tab');assert.equal(await focused(),'settings-open');await page.keyboard.press('Enter');
   await page.locator('#settings').waitFor({state:'visible'});assert.equal(await focused(),'settings-close');
@@ -93,6 +98,9 @@ try{
     assert.equal(await mp.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),true);
     await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-correction.png`,out)),fullPage:true});
     await mp.locator('#next-button').tap();assert.equal(await mp.locator('#question-number').textContent(),'02 / 06');
+    await mp.locator('#theme-toggle').tap();assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
+    await mp.reload();await mp.locator('#answer').waitFor({state:'visible'});assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
+    await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-dark.png`,out)),fullPage:true});
     await mp.locator('#settings-open').tap();await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-settings.png`,out)),fullPage:true});
     await mobile.close();console.log(`PASS mobile ${width}px: layout, touch submit/next, settings, no horizontal overflow.`);
   }

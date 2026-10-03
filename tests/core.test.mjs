@@ -99,3 +99,10 @@ test('an older saved wrong result requires correction without resetting existing
   const r=restoreProgress(bank,s);assert.equal(r.records.two.streak,2);assert.equal(r.active.result.correct,false);
   assert.equal(activateNext(bank,r),null);assert.equal(retry(r),true);submit(bank,r,bank.sentences[0].answers[0]);assert.equal(r.records.one.streak,0);
 });
+
+test('the first pass follows bank order even after mistakes; weak items return after unseen items',()=>{
+  const four=validateBank([...bank.sentences,{id:'four',chinese:'原创四',answers:['This is the fourth sentence.']}]);
+  const s=freshProgress(four);activateNext(four,s);submit(four,s,'wrong');retry(s);submit(four,s,four.sentences[0].answers[0]);
+  for (const q of four.sentences.slice(1)) {activateNext(four,s);assert.equal(s.active.id,q.id);submit(four,s,q.answers[0]);}
+  activateNext(four,s);assert.equal(s.active.id,'one');
+});
