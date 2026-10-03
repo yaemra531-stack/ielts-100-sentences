@@ -1,5 +1,6 @@
-import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-4';
-import {createFeedback} from './feedback.js?v=20261003-4';
+import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-5';
+import {createFeedback} from './feedback.js?v=20261003-5';
+import {createNarration} from './narration.js?v=20261003-5';
 
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
@@ -43,6 +44,40 @@ document.querySelectorAll('[data-feedback-sound]').forEach(button => {
   button.addEventListener('click',() => { void feedback.play(button.dataset.feedbackSound); });
 });
 let bank, progress, customBank = false, storageOkay = true;
+const NARRATION_KEY = 'ielts100.narration.v1';
+let autoNarration = true;
+try { autoNarration = localStorage.getItem(NARRATION_KEY) !== 'off'; } catch {}
+const narration = createNarration(renderNarration);
+function renderNarration() {
+  $('narration-toggle').checked = autoNarration;
+  $('narration-bank').textContent = narration.summary(bank);
+  $('replay-button').textContent = narration.state.playing ? '■ 停止朗读' : '▶ 重听';
+  $('replay-button').title = 'Alt R 朗读 / 停止';
+  const target = progress?.active?.result?.target;
+  $('narration-note').textContent = narration.state.message || (target ? narration.describe(target) : '');
+}
+function replay() {
+  if (!progress?.active?.result) return;
+  if (narration.state.playing) narration.stop();
+  else narration.play(progress.active.result.target);
+}
+$('replay-button').addEventListener('click',replay);
+$('narration-toggle').addEventListener('change',() => {
+  autoNarration = $('narration-toggle').checked;
+  try { localStorage.setItem(NARRATION_KEY,autoNarration ? 'on' : 'off'); } catch {}
+  if (!autoNarration) narration.stop();
+});
+$('audio-import').addEventListener('change',async event => {
+  const file=event.target.files[0];event.target.value='';if (!file) return;
+  try {
+    if (file.size > 30*1024*1024) throw new Error('语音包请小于 30 MB。');
+    const count=await narration.importPack(JSON.parse(await file.text()));
+    settingsMessage(`已保存 ${count} 条本机音频。${narration.summary(bank)}。`);
+  } catch (error) { settingsMessage(`${error instanceof SyntaxError ? '语音包 JSON 格式不正确。' : error.message} 题库与学习进度未改变。`,true); }
+});
+window.speechSynthesis?.addEventListener('voiceschanged',renderNarration);
+renderNarration();
+void narration.load();
 const notice = (message) => { $('notice').textContent = message; $('notice').hidden = false; };
 function storageWarning() {
   storageOkay = false;
@@ -137,6 +172,7 @@ function renderResult(q) {
     const green = document.createElement('span'); green.className = 'legend-green'; green.textContent = '绿色：参考中的差异';
     $('diff-legend').append(red,document.createElement('br'),green);
   } else $('diff-legend').textContent = '大小写与标点不影响判分。';
+  renderNarration();
 }
 function renderHistory(active) {
   const history = active.history || [];
@@ -216,6 +252,7 @@ function render(focus = true) {
     renderHistory(active);
   }
   renderJournal();
+  $('narration-bank').textContent = narration.summary(bank);
   if (focus) focusAction();
 }
 function showHint() {
@@ -232,10 +269,12 @@ function checkAnswer(event) {
   void feedback.play(!answer.trim() ? 'empty' : result.correct ? 'correct' : 'unmatched');
   save(); render();
   if (feedbackEnabled && result.correct) $('feedback').classList.add('feedback-pop');
+  if (autoNarration) narration.play(result.target);
   (progress.active.result.correct ? $('next-button') : $('retry-button')).scrollIntoView({block:'nearest'});
 }
 function next() {
   if (!progress?.active?.result?.correct) return;
+  narration.stop();
   activateNext(bank,progress); save(); render();
 }
 
@@ -250,11 +289,13 @@ $('answer').addEventListener('keydown',event => {
 document.addEventListener('keydown',event => {
   if (event.key === 'Enter' && event.repeat) event.preventDefault();
   if (event.altKey && event.code === 'KeyH' && !$('settings').open) { event.preventDefault(); if (!event.repeat) showHint(); }
+  if (event.altKey && event.code === 'KeyR' && !$('settings').open) { event.preventDefault(); if (!event.repeat) replay(); }
 });
 $('hint-button').addEventListener('click',showHint);
 $('next-button').addEventListener('click',next);
 $('retry-button').addEventListener('click',() => {
   if (!retry(progress)) return;
+  narration.stop();
   save(); render();
   $('answer').scrollIntoView({block:'nearest'});
 });
@@ -262,7 +303,7 @@ $('review-button').addEventListener('click',() => {
   if (!bank || !progress) return;
   progress.reviewIds = bank.sentences.map(q=>q.id); activateNext(bank,progress); save(); render();
 });
-$('settings-open').addEventListener('click',() => $('settings').showModal());
+$('settings-open').addEventListener('click',() => {narration.stop();$('settings').showModal();});
 $('settings-close').addEventListener('click',() => $('settings').close());
 $('settings').addEventListener('close',focusAction);
 function settingsMessage(message, error = false) {
@@ -271,6 +312,7 @@ function settingsMessage(message, error = false) {
 $('reset-button').addEventListener('click',() => {
   if (!bank) return;
   if (!confirm(`确定重置「${bank.title}」的学习进度？题库会保留，掌握数、今日记录和全部作答记录会清空。建议先导出备份。`)) return;
+  narration.stop();
   progress = freshProgress(bank); activateNext(bank,progress); save(true); render(false);
   settingsMessage('进度已重置，可以重新开始。');
 });
@@ -293,6 +335,7 @@ $('import-file').addEventListener('change',async event => {
     const source = backup ? raw.progress : progress;
     const preserved = incoming.sentences.filter(q => source?.records?.[q.id]?.signature === signature(q)).length;
     if (!confirm(backup ? `恢复「${incoming.title}」的题库与进度？这会替换本机当前记录。` : `导入「${incoming.title}」的 ${incoming.sentences.length} 句？完全相同的 ${preserved} 句可保留进度，其余从头开始。`)) return;
+    narration.stop();
     const incomingProgress = restoreProgress(incoming,source);
     if (!incomingProgress.active) activateNext(incoming,incomingProgress);
     try { localStorage.setItem(BANK_KEY,JSON.stringify(incoming)); } catch { storageWarning(); }
@@ -313,6 +356,9 @@ $('log-export').addEventListener('click',()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 window.addEventListener('storage',event=>{
+  if (event.key === NARRATION_KEY) {
+    autoNarration = event.newValue !== 'off'; if (!autoNarration) narration.stop(); renderNarration(); return;
+  }
   if (event.key === FEEDBACK_KEY) {
     feedbackEnabled = event.newValue !== 'off'; applyFeedbackPreference(); return;
   }
@@ -324,7 +370,7 @@ window.addEventListener('storage',event=>{
   } catch {}
 });
 document.addEventListener('visibilitychange' ,() => {
-  if (document.hidden) feedback.stop();
+  if (document.hidden) { feedback.stop(); narration.stop(); }
   else if (bank && progress) renderStats();
 });
 
