@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#f4f3ee">
   <meta name="description" content="看到中文，敲出英文。一句接一句的轻量默写练习。">
   <title>顾家北100句 · 默写</title>
-  <link rel="stylesheet" href="style.css?v=20261003-2">
-  <script type="module" src="app.js?v=20261003-2"></script>
+  <link rel="stylesheet" href="style.css?v=20261003-3">
+  <script type="module" src="app.js?v=20261003-3"></script>
 </head>
 <body>
   <div class="page">
@@ -44,6 +44,14 @@
         <span class="complete-mark" aria-hidden="true">✓</span><p class="eyebrow">ONE SENTENCE AT A TIME.</p><h2>这一轮，都写出来了。</h2><p id="complete-text"></p><button id="review-button" class="primary-button">再巩固一轮 <span class="button-key">↵</span></button>
       </section>
       <div class="footnote"><span><span class="keyboard-hint">Enter 核对 / 重写 / 下一句 · Shift Enter 换行</span><span class="mobile-hint">写完核对，一句接一句。</span></span><span id="save-status">进度保存在本机</span></div>
+      <section class="journal" aria-labelledby="journal-title">
+        <div class="journal-heading"><div><h2 id="journal-title">作答记录</h2><p id="journal-count">0 次核对</p></div><button id="log-export" title="导出全部记录，包括匹配、未匹配和订正" type="button" class="secondary-button" disabled>导出给 AI</button></div>
+        <details id="journal-details" open><summary>查看按时间排列的记录</summary>
+          <div class="journal-tools"><label for="log-filter">显示</label><select id="log-filter"><option value="all">全部作答</option><option value="unmatched">只看未匹配</option></select><span id="journal-visible"></span></div>
+          <p class="journal-note">这里只比较与题库答案的差异，未匹配不一定是英文错误。记录保存在本机。</p>
+          <p id="journal-empty" class="journal-note">每次核对都会自动记录，换句后也保留。</p><div id="journal-list"></div><button id="log-more" type="button" class="secondary-button" hidden>再显示 20 条</button>
+        </details>
+      </section>
     </main>
     <footer><span>顾家北100句 · 默写练习</span><span>不求一次记住，只求每次写实。</span></footer>
   </div>
@@ -51,7 +59,7 @@
     <div class="dialog-heading"><h2 id="settings-title">题库与进度</h2><button id="settings-close" class="icon-button" aria-label="关闭设置">×</button></div>
     <p class="dialog-note">题库和进度只保存在这个浏览器，不会上传。换设备前可以导出备份。</p>
     <section class="settings-section"><h3>题库</h3><p id="settings-bank"></p><label class="secondary-button file-label" for="import-file">导入题库 / 备份<input id="import-file" type="file" accept="application/json,.json"></label><a href="sentences.json" download="sentences-example.json" class="format-link">下载 JSON 格式示例 ↗</a><p class="settings-help">每句支持 answers 数组中的多个标准答案。示例句为原创，正式题库由你在本机导入。</p></section>
-    <section class="settings-section"><h3>进度</h3><div class="settings-actions"><button id="export-button" class="secondary-button">导出进度备份</button><button id="reset-button" class="danger-button">重置学习进度</button></div><p class="settings-help">掌握 = 两次连续独立答对；答错或使用提示会重新计数。备份含当前题库与进度。</p></section>
+    <section class="settings-section"><h3>进度</h3><div class="settings-actions"><button id="export-button" class="secondary-button">导出进度备份</button><button id="reset-button" class="danger-button">重置学习进度</button></div><p class="settings-help">掌握 = 两次连续独立答对；答错或使用提示会重新计数。备份含题库、进度和全部作答记录；重置会一并清空作答记录。</p></section>
     <p id="settings-message" class="settings-message" role="status" hidden></p>
   </dialog>
 </body>

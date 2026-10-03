@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {grade,normalize,validateBank,freshProgress,restoreProgress,activateNext,submit,masteredCount,localDate,retry} from '../core.js';
+import {grade,normalize,validateBank,freshProgress,restoreProgress,activateNext,submit,masteredCount,localDate,retry,exportAttemptMarkdown,restoreAttemptLog} from '../core.js';
 const bank = validateBank({title:'Test',sentences:[
   {id:'one',chinese:'原创一',answers:['We walk home after lunch.','After lunch, we walk home.']},
   {id:'two',chinese:'原创二',answers:['She keeps a blue notebook.']},
@@ -105,4 +105,38 @@ test('the first pass follows bank order even after mistakes; weak items return a
   const s=freshProgress(four);activateNext(four,s);submit(four,s,'wrong');retry(s);submit(four,s,four.sentences[0].answers[0]);
   for (const q of four.sentences.slice(1)) {activateNext(four,s);assert.equal(s.active.id,q.id);submit(four,s,q.answers[0]);}
   activateNext(four,s);assert.equal(s.active.id,'one');
+});
+
+test('every submission persists its source snapshot, exact answer, time and mode across next and reload',()=>{
+  const s=freshProgress(bank);activateNext(bank,s);
+  const wrong='We walk house after lunch.';
+  submit(bank,s,wrong,'2026-10-03',new Date('2026-10-03T12:00:00Z'));retry(s);
+  submit(bank,s,bank.sentences[0].answers[0],'2026-10-03',new Date('2026-10-03T12:01:00Z'));activateNext(bank,s);
+  s.active.hintLevel=1;submit(bank,s,bank.sentences[1].answers[0],'2026-10-03',new Date('2026-10-03T12:02:00Z'));
+  const r=restoreProgress(bank,JSON.parse(JSON.stringify(s)));
+  assert.equal(r.attemptLog.length,3);assert.equal(new Set(r.attemptLog.map(e=>e.id)).size,3);
+  assert.equal(r.attemptLog[0].answer,wrong);assert.equal(r.attemptLog[0].timestamp,'2026-10-03T12:00:00.000Z');
+  assert.equal(r.attemptLog[0].chinese,bank.sentences[0].chinese);assert.deepEqual(r.attemptLog[0].acceptedAnswers,bank.sentences[0].answers);
+  assert.equal(r.attemptLog[1].repair,true);assert.equal(r.attemptLog[2].usedHint,true);
+  assert.equal(submit(bank,r,'repeated'),null);assert.equal(r.attemptLog.length,3);
+  const changed=validateBank({...bank,sentences:bank.sentences.map(q=>q.id==='one'?{...q,answers:['Changed source.']}:q)});
+  assert.deepEqual(restoreProgress(changed,r).attemptLog[0].acceptedAnswers,bank.sentences[0].answers);
+});
+test('old retained answers migrate once with unknown timestamps and no fabricated missing history',()=>{
+  const s=freshProgress(bank);activateNext(bank,s);submit(bank,s,'first mistake');retry(s);submit(bank,s,'second mistake');
+  delete s.attemptLog;delete s.logVersion;delete s.logEpoch;
+  const r=restoreProgress(bank,s);assert.equal(r.attemptLog.length,2);assert.equal(r.attemptLog[0].timestamp,null);
+  assert.equal(r.attemptLog[1].answer,'second mistake');assert.equal(r.attemptLog[1].timestamp,null);
+  assert.equal(restoreProgress(bank,JSON.parse(JSON.stringify(r))).attemptLog.length,2);
+  r.active=null;assert.equal(restoreProgress(bank,r).attemptLog.length,2);
+});
+test('AI Markdown exports all exact responses chronologically with honest grading and correction context',()=>{
+  const s=freshProgress(bank);activateNext(bank,s);submit(bank,s,'We walk house after lunch.','2026-10-03',new Date('2026-10-03T12:00:00Z'));
+  retry(s);submit(bank,s,bank.sentences[0].answers[0],'2026-10-03',new Date('2026-10-03T12:01:00Z'));
+  const md=exportAttemptMarkdown(s.attemptLog,new Date('2026-10-03T13:00:00Z'));
+  assert.match(md,/记录 1/);assert.match(md,/记录 2/);assert.match(md,/We walk house after lunch/);
+  assert.match(md,/未匹配不等于英文不成立/);assert.match(md,/即时订正/);assert.match(md,/house/);assert.match(md,/home/);
+  assert.ok(md.indexOf('We walk house') < md.lastIndexOf('We walk home'));
+  assert.equal(restoreAttemptLog([...s.attemptLog,s.attemptLog[0],{id:'bad',answer:'invalid'}]).length,2);
+  assert.equal(freshProgress(bank).attemptLog.length,0);
 });

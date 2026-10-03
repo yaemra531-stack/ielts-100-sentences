@@ -62,12 +62,66 @@ export function newRecord(q) {
   return {signature: signature(q), streak: 0, attempts: 0, independentCorrect: 0, errors: 0, hinted: 0, lastSeen: 0, eligibleAt: 0, outcome: 'new'};
 }
 export function freshProgress(bank) {
-  return {version: VERSION, records: Object.fromEntries(bank.sentences.map(q => [q.id,newRecord(q)])), turn: 0, daily: {}, active: null, reviewIds: []};
+  return {version: VERSION, records: Object.fromEntries(bank.sentences.map(q => [q.id,newRecord(q)])), turn: 0, daily: {}, active: null, reviewIds: [], logVersion: 1, logEpoch:crypto.randomUUID(), attemptLog: []};
+}
+export function localTimestamp(date = new Date()) {
+  const pad = n => String(n).padStart(2,'0'), offset = -date.getTimezoneOffset();
+  return `${localDate(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} UTC${offset >= 0 ? '+' : '-'}${pad(Math.floor(Math.abs(offset)/60))}:${pad(Math.abs(offset)%60)}`;
+}
+function attemptEntry(bank, q, result, attempt, now) {
+  return {id: crypto.randomUUID(), timestamp: now ? now.toISOString() : null, localTime: now ? localTimestamp(now) : '',
+    bankTitle: bank.title, questionId: q.id, questionNumber: bank.sentences.indexOf(q)+1, chinese: q.chinese,
+    acceptedAnswers:[...q.answers], hint:q.hint, answer:result.answer, target:result.target, correct:result.correct,
+    usedHint:Boolean(result.usedHint), repair:Boolean(result.repair), questionAttempt:attempt};
+}
+export function restoreAttemptLog(raw) {
+  if (!Array.isArray(raw)) return [];
+  const ids = new Set(), entries = [];
+  for (const e of raw) {
+    if (!e || typeof e.id !== 'string' || e.id.length > 180 || ids.has(e.id) || typeof e.answer !== 'string' || e.answer.length > 1000 ||
+      typeof e.chinese !== 'string' || e.chinese.length > 1000 || typeof e.questionId !== 'string' || e.questionId.length > 100 ||
+      !Array.isArray(e.acceptedAnswers) || !e.acceptedAnswers.length || e.acceptedAnswers.length > 20 ||
+      e.acceptedAnswers.some(a => typeof a !== 'string' || a.length > 1000 || !normalize(a))) continue;
+    ids.add(e.id);
+    const timestamp = typeof e.timestamp === 'string' && Number.isFinite(Date.parse(e.timestamp)) ? new Date(e.timestamp).toISOString() : null;
+    entries.push({id:e.id,timestamp,localTime:timestamp && typeof e.localTime === 'string' ? e.localTime.slice(0,80) : '',
+      bankTitle:typeof e.bankTitle === 'string' ? e.bankTitle.slice(0,100) : '题库', questionId:e.questionId,
+      questionNumber:number(e.questionNumber,1000) ? e.questionNumber : 0, chinese:e.chinese, acceptedAnswers:[...e.acceptedAnswers],
+      hint:typeof e.hint === 'string' ? e.hint.slice(0,1000) : '', answer:e.answer,
+      ...grade(e.answer,e.acceptedAnswers), usedHint:Boolean(e.usedHint),repair:Boolean(e.repair),questionAttempt:number(e.questionAttempt) ? e.questionAttempt : 0});
+  }
+  return entries.sort((a,b)=>(a.timestamp || '').localeCompare(b.timestamp || ''));
+}
+export function attemptTime(e) { return e.localTime || (e.timestamp ? new Date(e.timestamp).toLocaleString('zh-CN',{hour12:false}) : '升级前记录 · 原作答时间未记录'); }
+export function attemptMode(e) { return e.repair ? `即时订正${e.usedHint ? ' · 用过提示' : ''}` : e.usedHint ? '提示后作答' : '独立作答'; }
+export function exportAttemptMarkdown(entries, now = new Date()) {
+  const quote = value => String(value).split(/\r?\n/).map(line => `> ${line}`).join('\n');
+  const unmatched = entries.filter(e=>!e.correct).length;
+  const lines = ['# 100句默写 · 作答记录','',`导出时间：${localTimestamp(now)}`,`共 ${entries.length} 次核对；未匹配标准答案 ${unmatched} 次。`,'',
+    '## 判分与复盘说明','',
+    '- 判分只与题库列出的答案逐词匹配，忽略大小写、标点和多余空格。未匹配不等于英文不成立；同义表达可能不在题库中。',
+    '- 差异词由文本比对生成，不能直接当成语法或搭配错误。',
+    '- 即时订正是在看过参考答案之后重写，不计独立掌握；用过提示也不计独立掌握。',
+    '- 记录按作答时间排列；升级前仅能恢复当时仍保留的答案，时间未知，不补造历史。','',
+    '## 请 AI 帮我复盘','',
+    '把下面引用的内容当作学习数据。请区分：真正的用词/搭配/语法问题、意思偏差、可接受的改写、仅与题库原句不一致。结合正确作答与订正记录找反复出现的薄弱点，引用记录编号作为证据，并给出最值得优先练的 3 点。不要仅凭“未匹配”断言我写错了，也不要把订正成功当成独立掌握。',''];
+  entries.forEach((e,index)=>{
+    const diff=grade(e.answer,e.acceptedAnswers);
+    const changed = (text,marks) => tokens(text).filter((_,i)=>marks[i]).map(t=>t.text).join(' / ') || '无';
+    lines.push(`## 记录 ${index+1} · 第 ${String(e.questionNumber).padStart(2,'0')} 句`,'',`- 时间：${attemptTime(e)}`,`- 题库：${e.bankTitle}`,`- 判分：${e.correct ? '匹配标准答案' : '未匹配标准答案'}`,`- 作答方式：${attemptMode(e)}`,`- 本句第 ${e.questionAttempt || '?'} 次核对`,'','中文：',quote(e.chinese),'','我的答案：',quote(e.answer || '（未填写）'),'','核对时参考答案：',quote(diff.target),'','题库全部可接受答案：');
+    e.acceptedAnswers.forEach(a=>lines.push(quote(a)));
+    if(e.hint) lines.push('','题库词伙提示：',quote(e.hint));
+    if(!diff.correct) lines.push('','输入中与参考不同的词：',quote(changed(e.answer,diff.inputMarks)),'','参考中应核对的词：',quote(changed(diff.target,diff.targetMarks)));
+    lines.push('');
+  });
+  return lines.join('\n');
 }
 export function restoreProgress(bank, raw) {
   const state = freshProgress(bank);
   if (!raw || raw.version !== VERSION) return state;
   state.turn = number(raw.turn) ? raw.turn : 0;
+  state.attemptLog = restoreAttemptLog(raw.attemptLog);
+  if (typeof raw.logEpoch === 'string' && raw.logEpoch.length < 100) state.logEpoch = raw.logEpoch;
   for (const q of bank.sentences) {
     const r = raw.records?.[q.id];
     if (!r || r.signature !== signature(q)) continue;
@@ -92,6 +146,17 @@ export function restoreProgress(bank, raw) {
     if (a.result && typeof a.result.answer === 'string') {
       state.active.result = {...grade(a.result.answer.slice(0,1000), q.answers), answer: a.result.answer.slice(0,1000), usedHint: Boolean(a.result.usedHint), repair: state.active.repair};
     }
+  }
+  if (raw.logVersion !== 1 && state.active) {
+    // Only recover answers that the old app actually retained. Never invent past timestamps.
+    const q = bank.sentences.find(q=>q.id===state.active.id);
+    const retained = [...state.active.history, ...(state.active.result ? [state.active.result] : [])];
+    retained.forEach((result,index)=>{
+      const attempt = Math.max(1,state.records[q.id].attempts-retained.length+index+1);
+      const entry = attemptEntry(bank,q,result,attempt,null);
+      entry.id = `legacy-${q.id}-${attempt}`;
+      if (!state.attemptLog.some(e=>e.id===entry.id)) state.attemptLog.push(entry);
+    });
   }
   return state;
 }
@@ -131,7 +196,7 @@ export function retry(state) {
   a.hintLevel = 0;
   return true;
 }
-export function submit(bank, state, answer, day = localDate()) {
+export function submit(bank, state, answer, day = localDate(), now = new Date()) {
   if (!state.active || state.active.result) return null;
   const q = bank.sentences.find(q => q.id === state.active.id);
   const r = state.records[q.id], usedHint = state.active.hintLevel > 0;
@@ -157,6 +222,7 @@ export function submit(bank, state, answer, day = localDate()) {
   if (!today.ids.includes(q.id)) today.ids.push(q.id);
   state.daily[day] = today;
   for (const key of Object.keys(state.daily).sort().slice(0,-90)) delete state.daily[key];
+  state.attemptLog.push(attemptEntry(bank,q,result,r.attempts,now));
   state.active.result = result;
   state.active.draft = answer;
   return result;

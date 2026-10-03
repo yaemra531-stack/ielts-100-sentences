@@ -42,6 +42,11 @@ try{
   assert.match(await page.locator('#history-list').textContent(),/Still wrong/);
   await page.screenshot({path:fileURLToPath(new URL('desktop-correction-history.png',out)),fullPage:true});
   await page.keyboard.press('Shift+Tab');assert.equal(await focused(),'next-button');await next();
+  assert.equal((await state()).attemptLog.length,3);assert.equal(await page.locator('.journal-item').count(),3);
+  await page.locator('#log-filter').selectOption('unmatched');assert.equal(await page.locator('.journal-item').count(),2);
+  const logDownloadPromise=page.waitForEvent('download');await page.locator('#log-export').click();const logDownload=await logDownloadPromise;
+  const logText=await readFile(await logDownload.path(),'utf8');assert.match(logText,/I usually walk by the sea/);assert.match(logText,/Still wrong/);assert.match(logText,/即时订正/);assert.match(logText,/未匹配不等于英文不成立/);
+  await page.locator('#log-filter').selectOption('all');await page.locator('#answer').focus();
   assert.equal(await page.locator('#question-number').textContent(),'02 / 06');
   await page.keyboard.press('Alt+h');assert.equal(await page.locator('#hint-box').isVisible(),true);
   await page.reload();await page.locator('#hint-box').waitFor({state:'visible'});assert.equal((await state()).active.hintLevel,1);
@@ -62,9 +67,9 @@ try{
   await page.locator('#settings').waitFor({state:'visible'});assert.equal(await focused(),'settings-close');
   await page.keyboard.press('Tab');assert.equal(await focused(),'import-file');await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await focused(),'export-button');
   const downloadEvent=page.waitForEvent('download');await page.keyboard.press('Enter');const download=await downloadEvent;
-  const backupText=await readFile(await download.path(),'utf8'),backup=JSON.parse(backupText);assert.equal(backup.format,'ielts100-backup');assert.equal(Object.values(backup.progress.records).filter(r=>r.streak===2).length,6);
+  const backupText=await readFile(await download.path(),'utf8'),backup=JSON.parse(backupText);assert.equal(backup.format,'ielts100-backup');assert.equal(Object.values(backup.progress.records).filter(r=>r.streak===2).length,6);assert.ok(backup.progress.attemptLog.length>12);
   await page.keyboard.press('Tab');assert.equal(await focused(),'reset-button');page.once('dialog',d=>d.accept());await page.keyboard.press('Enter');
-  assert.equal(Object.values((await state()).records).filter(r=>r.streak===2).length,0);assert.deepEqual((await state()).daily,{});
+  assert.equal(Object.values((await state()).records).filter(r=>r.streak===2).length,0);assert.deepEqual((await state()).daily,{});assert.equal((await state()).attemptLog.length,0);
   await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.id==='answer');assert.equal(await focused(),'answer');
   // Invalid imports must leave progress untouched; imported strings must render only as text.
   await page.locator('#settings-open').click();const before=await state();
@@ -76,7 +81,7 @@ try{
   await page.keyboard.press('Escape');assert.match(await page.locator('#chinese').textContent(),/<img/);assert.equal(await page.locator('#chinese img').count(),0);assert.equal(await page.evaluate(()=>window.hacked),undefined);
   await page.reload();await page.waitForFunction(()=>document.getElementById('bank-label').textContent==='导入测试');assert.match(await page.locator('#chinese').textContent(),/测试文字/);
   await page.locator('#settings-open').click();page.once('dialog',d=>d.accept());await page.locator('#import-file').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(backupText)});
-  await page.waitForFunction(()=>document.getElementById('settings-message').textContent.includes('恢复'));await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.id==='review-button');assert.equal(await page.locator('#complete').isVisible(),true);
+  await page.waitForFunction(()=>document.getElementById('settings-message').textContent.includes('恢复'));await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.id==='review-button');assert.equal(await page.locator('#complete').isVisible(),true);assert.equal((await state()).attemptLog.length,backup.progress.attemptLog.length);
   // Review does not discard mastery, but an actual failure puts that sentence back in the queue.
   await page.keyboard.press('Enter');assert.equal(await page.locator('#practice').isVisible(),true);assert.equal(Object.values((await state()).records).filter(r=>r.streak===2).length,6);
   await typeAnswer('A wrong review answer.');assert.equal(Object.values((await state()).records).filter(r=>r.streak===2).length,5);const reviewId=(await state()).active.id;const reviewed=bank.sentences.find(q=>q.id===reviewId);await next();await typeAnswer(reviewed.answers[0]);await next();await finishRound();
@@ -101,6 +106,8 @@ try{
     await mp.locator('#theme-toggle').tap();assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
     await mp.reload();await mp.locator('#answer').waitFor({state:'visible'});assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
     await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-dark.png`,out)),fullPage:true});
+    assert.equal(await mp.locator('.journal-item').count(),2);assert.match(await mp.locator('#journal-list').textContent(),/订正/);
+    const mobileExport=mp.waitForEvent('download');await mp.locator('#log-export').tap();const mobileLog=await mobileExport;assert.ok(mobileLog);
     await mp.locator('#settings-open').tap();await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-settings.png`,out)),fullPage:true});
     await mobile.close();console.log(`PASS mobile ${width}px: layout, touch submit/next, settings, no horizontal overflow.`);
   }
@@ -108,4 +115,15 @@ try{
   const bp=await blocked.newPage();await bp.goto(url);await bp.waitForFunction(()=>!document.getElementById('answer').disabled);assert.match(await bp.locator('#notice').textContent(),/存储/);
   await bp.locator('#answer').fill(bank.sentences[0].answers[0]);await bp.locator('#submit-button').click();assert.match(await bp.locator('#result-title').textContent(),/写对/);await blocked.close();
   console.log('PASS storage blocked: explicit warning; practice stays usable.');
+  const shared=await browser.newContext();const a=await shared.newPage(),b=await shared.newPage();
+  await a.goto(url);await a.waitForFunction(()=>!document.getElementById('answer').disabled);
+  await b.goto(url);await b.waitForFunction(()=>!document.getElementById('answer').disabled);
+  await a.locator('#answer').fill('First tab mistake.');await a.locator('#submit-button').click();
+  await b.locator('#answer').fill('Second tab mistake.');await b.locator('#submit-button').click();
+  const merged=await b.evaluate(()=>JSON.parse(localStorage.getItem('ielts100.progress.v1')).attemptLog);
+  assert.equal(merged.length,2);assert.ok(merged.some(e=>e.answer==='First tab mistake.'));assert.ok(merged.some(e=>e.answer==='Second tab mistake.'));
+  await b.locator('#settings-open').click();b.once('dialog',d=>d.accept());await b.locator('#reset-button').click();await b.keyboard.press('Escape');
+  await a.locator('#retry-button').click();await a.locator('#answer').fill('Stale after reset.');
+  assert.equal((await b.evaluate(()=>JSON.parse(localStorage.getItem('ielts100.progress.v1')))).attemptLog.length,0);
+  await shared.close();console.log('PASS multiple tabs: responses merge; a stale tab cannot resurrect logs after reset.');
 }finally{await browser.close();}

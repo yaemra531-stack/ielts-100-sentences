@@ -1,4 +1,4 @@
-import {VERSION, tokens, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry} from './core.js?v=20261003-2';
+import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-3';
 
 const STATE_KEY = 'ielts100.progress.v1';
 const BANK_KEY = 'ielts100.bank.v1';
@@ -33,10 +33,27 @@ function read(key) {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : null; }
   catch { storageWarning(); return null; }
 }
-function save() {
+function save(replaceLogs = false) {
   if (!progress) return;
-  try { localStorage.setItem(STATE_KEY, JSON.stringify(progress)); }
+  try {
+    if (!replaceLogs) {
+      const existing = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
+      if (existing?.logEpoch && existing.logEpoch !== progress.logEpoch) {
+        notice('另一个页面已更换题库或重置进度。请先导出本页记录，再刷新继续，避免覆盖新进度。');
+        return;
+      }
+      mergeSavedLogs(existing?.attemptLog);
+    }
+    localStorage.setItem(STATE_KEY, JSON.stringify(progress));
+  }
   catch { storageWarning(); }
+}
+function mergeSavedLogs(raw) {
+  if (!Array.isArray(raw) || !progress) return;
+  const ids = new Set(progress.attemptLog.map(e=>e.id));
+  const missing = raw.filter(e=>e && !ids.has(e.id));
+  if (missing.length) progress.attemptLog.push(...restoreAttemptLog(missing));
+  progress.attemptLog.sort((a,b)=>(a.timestamp || '').localeCompare(b.timestamp || ''));
 }
 function focusAction() {
   if ($('settings').open || !progress) return;
@@ -87,7 +104,7 @@ function renderResult(q) {
     $('result-title').textContent = record.streak >= 2 ? '这句，掌握了。' : '写对了。';
     $('result-detail').textContent = record.streak >= 2 ? '已连续两次独立答对。继续下一句。' : '独立答对 1 / 2。隔开几句后，再确认一次。';
   } else {
-    $('result-title').textContent = result.answer.trim() ? '还差一点，再来一次。' : '先看答案，再试一次。';
+    $('result-title').textContent = result.answer.trim() ? '暂未匹配标准答案。' : '先看答案，再试一次。';
     $('result-detail').textContent = '先看清差异，再重写本句；写对后进入下一句。';
   }
   $('your-answer-block').hidden = result.correct || !result.answer.trim();
@@ -96,8 +113,8 @@ function renderResult(q) {
   $('reference-label').textContent = result.correct ? '标准英文' : '参考答案 · 最接近的可接受答案';
   $('diff-legend').replaceChildren();
   if (!result.correct) {
-    const red = document.createElement('span'); red.className = 'legend-red'; red.textContent = '红色：多写 / 写错';
-    const green = document.createElement('span'); green.className = 'legend-green'; green.textContent = '绿色：漏写 / 应替换';
+    const red = document.createElement('span'); red.className = 'legend-red'; red.textContent = '红色：与参考不同';
+    const green = document.createElement('span'); green.className = 'legend-green'; green.textContent = '绿色：参考中的差异';
     $('diff-legend').append(red,document.createElement('br'),green);
   } else $('diff-legend').textContent = '大小写与标点不影响判分。';
 }
@@ -116,6 +133,40 @@ function renderHistory(active) {
     item.append(heading,answer,referenceLabel,reference); $('history-list').append(item);
   });
 }
+let logVisibleLimit = 20;
+function renderJournal() {
+  const entries = progress.attemptLog;
+  $('journal-count').textContent = `${entries.length} 次核对 · ${entries.filter(e=>!e.correct).length} 次未匹配`;
+  $('log-export').disabled = !entries.length;
+  $('journal-list').replaceChildren();
+  const filtered = entries.map((entry,index)=>({entry,index})).filter(({entry})=>$('log-filter').value !== 'unmatched' || !entry.correct);
+  $('journal-empty').hidden = filtered.length > 0;
+  $('journal-empty').textContent = entries.length ? '当前没有未匹配的记录。' : '每次核对都会自动记录，换到下一句后也会保留。';
+  filtered.slice(0,logVisibleLimit).forEach(({entry:e,index})=>{
+    const item = document.createElement('article'); item.className = 'journal-item';
+    const meta = document.createElement('div'); meta.className = 'journal-meta';
+    const label = document.createElement('span');label.textContent = `记录 ${index+1} · 第 ${String(e.questionNumber).padStart(2,'0')} 句`;
+    const time = document.createElement('span');time.textContent = attemptTime(e);meta.append(label,time);
+    const mode = document.createElement('p');mode.className = `journal-outcome ${e.correct ? 'matched' : 'unmatched'}`;mode.textContent = `${e.correct ? '匹配标准答案' : '未匹配标准答案'} · ${attemptMode(e)}`;
+    const chinese = document.createElement('p');chinese.className = 'journal-chinese';chinese.textContent = e.chinese;
+    item.append(meta,mode,chinese);
+    const hideAnswer = progress.active && !progress.active.result && progress.active.id === e.questionId;
+    if (hideAnswer) {
+      const hiddenNote = document.createElement('p');hiddenNote.className = 'journal-note';hiddenNote.textContent = '本句正在默写，核对后可查看先前答案。';item.append(hiddenNote);
+    } else {
+      const diff = gradeForEntry(e);
+      const ownLabel = document.createElement('span');ownLabel.className = 'answer-label';ownLabel.textContent = '你的答案';
+      const own = document.createElement('p');renderSentence(own,e.answer || '（未填写）',diff.inputMarks,'word-error');
+      const referenceLabel = document.createElement('span');referenceLabel.className = 'answer-label';referenceLabel.textContent = '核对时的参考答案';
+      const reference = document.createElement('p');renderSentence(reference,diff.target,diff.targetMarks,'word-needed');
+      item.append(ownLabel,own,referenceLabel,reference);
+    }
+    $('journal-list').append(item);
+  });
+  $('log-more').hidden = filtered.length <= logVisibleLimit;
+  $('journal-visible').textContent = filtered.length ? `按时间从早到晚 · 显示 ${Math.min(logVisibleLimit,filtered.length)} / ${filtered.length} 条` : '';
+}
+function gradeForEntry(e) { return grade(e.answer,e.acceptedAnswers); }
 function render(focus = true) {
   renderStats();
   const active = progress.active;
@@ -144,6 +195,7 @@ function render(focus = true) {
     if (result) renderResult(q);
     renderHistory(active);
   }
+  renderJournal();
   if (focus) focusAction();
 }
 function showHint() {
@@ -194,8 +246,8 @@ function settingsMessage(message, error = false) {
 }
 $('reset-button').addEventListener('click',() => {
   if (!bank) return;
-  if (!confirm(`确定重置「${bank.title}」的学习进度？题库会保留，掌握数与今日记录会归零。建议先导出备份。`)) return;
-  progress = freshProgress(bank); activateNext(bank,progress); save(); render(false);
+  if (!confirm(`确定重置「${bank.title}」的学习进度？题库会保留，掌握数、今日记录和全部作答记录会清空。建议先导出备份。`)) return;
+  progress = freshProgress(bank); activateNext(bank,progress); save(true); render(false);
   settingsMessage('进度已重置，可以重新开始。');
 });
 $('export-button').addEventListener('click',() => {
@@ -210,7 +262,7 @@ $('import-file').addEventListener('change',async event => {
   const file = event.target.files[0]; event.target.value = '';
   if (!file) return;
   try {
-    if (file.size > 2 * 1024 * 1024) throw new Error('文件过大，请使用 2 MB 以内的 JSON。');
+    if (file.size > 20 * 1024 * 1024) throw new Error('文件过大，请使用 20 MB 以内的 JSON。');
     const raw = JSON.parse(await file.text()), backup = raw?.format === 'ielts100-backup';
     if (backup && (raw.version !== VERSION || !raw.progress || raw.progress.version !== VERSION)) throw new Error('备份版本或进度格式不正确。');
     const incoming = validateBank(backup ? raw.bank : raw);
@@ -221,13 +273,30 @@ $('import-file').addEventListener('change',async event => {
     if (!incomingProgress.active) activateNext(incoming,incomingProgress);
     try { localStorage.setItem(BANK_KEY,JSON.stringify(incoming)); } catch { storageWarning(); }
     bank = incoming; progress = incomingProgress; customBank = true;
-    save(); if (storageOkay) $('notice').hidden = true;
+    progress.logEpoch = crypto.randomUUID();
+    save(true); if (storageOkay) $('notice').hidden = true;
     render(false); settingsMessage(`已导入 ${bank.sentences.length} 句${backup ? '，进度已恢复' : `，保留 ${preserved} 句的进度`}。`);
   } catch (error) {
     settingsMessage(error instanceof SyntaxError ? 'JSON 格式不正确，当前题库和进度未改变。' : `${error.message} 当前题库和进度未改变。`,true);
   }
 });
-document.addEventListener('visibilitychange',() => { if (!document.hidden && bank && progress) renderStats(); });
+$('log-filter').addEventListener('change',()=>{logVisibleLimit=20;renderJournal();});
+$('log-more').addEventListener('click',()=>{logVisibleLimit+=20;renderJournal();});
+$('log-export').addEventListener('click',()=>{
+  if (!progress?.attemptLog.length) return;
+  const url = URL.createObjectURL(new Blob([exportAttemptMarkdown(progress.attemptLog)],{type:'text/markdown;charset=utf-8'}));
+  const link=document.createElement('a');link.href=url;link.download=`100句-作答记录-${localDate()}.md`;document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+window.addEventListener('storage',event=>{
+  if (event.key !== STATE_KEY || !event.newValue || !progress) return;
+  try {
+    const incoming=JSON.parse(event.newValue);
+    if (incoming.logEpoch !== progress.logEpoch) {notice('另一个页面已更换题库或重置进度，请刷新本页后继续。');return;}
+    mergeSavedLogs(incoming.attemptLog);renderJournal();
+  } catch {}
+});
+document.addEventListener('visibilitychange' ,() => { if (!document.hidden && bank && progress) renderStats(); });
 
 async function init() {
   try {
