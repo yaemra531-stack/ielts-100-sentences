@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "title": "原创示例题库",
+  "sentences": [
+    {"id":"demo-01","chinese":"午饭后，我通常沿着河边散步。","answers":["I usually take a walk along the river after lunch.","After lunch, I usually take a walk along the river."],"hint":"take a walk / after lunch"},
+    {"id":"demo-02","chinese":"她把钥匙放在门边的蓝色盒子里。","answers":["She keeps her keys in a blue box by the door.","She puts her keys in a blue box by the door."],"hint":"her keys / by the door"},
+    {"id":"demo-03","chinese":"我们可以周六早上一起去买水果。","answers":["We can buy some fruit together on Saturday morning.","We can go shopping for fruit together on Saturday morning."],"hint":"together / on Saturday morning"},
+    {"id":"demo-04","chinese":"这家小咖啡馆在下雨天格外安静。","answers":["This little cafe is especially quiet on rainy days.","This small café is particularly quiet on rainy days."],"hint":"especially quiet / on rainy days"},
+    {"id":"demo-05","chinese":"我忘了给窗边的植物浇水。","answers":["I forgot to water the plant by the window.","I forgot to water the plant next to the window."],"hint":"forgot to / water the plant"},
+    {"id":"demo-06","chinese":"如果公交车晚点，我们就步行回家。","answers":["If the bus is late, we will walk home.","If the bus is late, we'll walk home."],"hint":"If the bus is late / walk home"}
+  ]
+}

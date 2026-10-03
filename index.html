@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f4f3ee">
+  <meta name="description" content="看到中文，敲出英文。一句接一句的轻量默写练习。">
+  <title>顾家北100句 · 默写</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <a class="brand" href="./" aria-label="100句默写首页"><span class="brand-mark">句</span><span>100句<span class="brand-light"> / 默写</span></span></a>
+      <button id="settings-open" class="icon-button" aria-label="题库与进度设置" title="题库与进度设置"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+    </header>
+    <main>
+      <section class="intro" aria-label="学习进度">
+        <div><p class="eyebrow">WRITE IT. REMEMBER IT.</p><h1>把熟悉，变成会写。</h1><p class="intro-note">看到中文，敲出英文。一句一句来。</p></div>
+        <div class="stats"><div><span id="today-count">0</span><span class="stat-label">今日默写<span id="today-attempts" class="stat-detail">0 次核对</span></span></div><div><span id="mastered-count">0<span class="stat-total"> / 6</span></span><span class="stat-label">已掌握<span class="stat-detail">独立答对两次</span></span></div></div>
+      </section>
+      <div class="progress-track" role="progressbar" aria-label="掌握进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <section id="practice" class="practice-card" aria-label="默写练习" aria-busy="true">
+        <div class="question-meta"><span id="bank-label" class="bank-label">正在加载题库</span><span id="question-number">—</span></div>
+        <p id="question-status" class="question-status">先读中文，再凭记忆写出英文。</p>
+        <h2 id="chinese">准备好，就从一句开始。</h2>
+        <form id="answer-form" autocomplete="off">
+          <label for="answer" class="sr-only">输入英文答案</label>
+          <textarea id="answer" name="answer" placeholder="在这里写下英文…" rows="3" maxlength="1000" spellcheck="false" autocapitalize="off" autocorrect="off" enterkeyhint="send" disabled></textarea>
+          <div id="hint-box" class="hint-box" hidden><span class="hint-label">提示</span><span id="hint-text"></span></div>
+          <div id="answer-actions" class="actions"><button id="hint-button" type="button" class="text-button" disabled>给我一点提示 <kbd>Alt H</kbd></button><button id="submit-button" type="submit" class="primary-button" disabled>核对答案 <span class="button-key">↵</span></button></div>
+        </form>
+        <section id="feedback" class="feedback" aria-live="polite" hidden>
+          <div class="result-heading"><span id="result-icon" class="result-icon"></span><div><h3 id="result-title"></h3><p id="result-detail"></p></div></div>
+          <div id="your-answer-block" class="answer-block" hidden><span class="answer-label">你的答案</span><p id="your-answer"></p></div>
+          <div class="answer-block"><span id="reference-label" class="answer-label">参考答案</span><p id="reference-answer"></p></div>
+          <div class="feedback-bottom"><span id="diff-legend"></span><button id="next-button" class="primary-button" type="button">下一句 <span class="button-key">↵</span></button></div>
+        </section>
+      </section>
+      <section id="complete" class="complete-card" hidden>
+        <span class="complete-mark" aria-hidden="true">✓</span><p class="eyebrow">ONE SENTENCE AT A TIME.</p><h2>这一轮，都写出来了。</h2><p id="complete-text"></p><button id="review-button" class="primary-button">再巩固一轮 <span class="button-key">↵</span></button>
+      </section>
+      <div class="footnote"><span><span class="keyboard-hint">Enter 核对 / 下一句 · Shift Enter 换行</span><span class="mobile-hint">写完核对，一句接一句。</span></span><span id="save-status">进度保存在本机</span></div>
+    </main>
+    <footer><span>顾家北100句 · 默写练习</span><span>不求一次记住，只求每次写实。</span></footer>
+  </div>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="dialog-heading"><h2 id="settings-title">题库与进度</h2><button id="settings-close" class="icon-button" aria-label="关闭设置">×</button></div>
+    <p class="dialog-note">题库和进度只保存在这个浏览器，不会上传。换设备前可以导出备份。</p>
+    <section class="settings-section"><h3>题库</h3><p id="settings-bank"></p><label class="secondary-button file-label" for="import-file">导入题库 / 备份<input id="import-file" type="file" accept="application/json,.json"></label><a href="sentences.json" download="sentences-example.json" class="format-link">下载 JSON 格式示例 ↗</a><p class="settings-help">每句支持 answers 数组中的多个标准答案。示例句为原创，正式题库由你在本机导入。</p></section>
+    <section class="settings-section"><h3>进度</h3><div class="settings-actions"><button id="export-button" class="secondary-button">导出进度备份</button><button id="reset-button" class="danger-button">重置学习进度</button></div><p class="settings-help">掌握 = 两次连续独立答对；答错或使用提示会重新计数。备份含当前题库与进度。</p></section>
+    <p id="settings-message" class="settings-message" role="status" hidden></p>
+  </dialog>
+</body>
+</html>
