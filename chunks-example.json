@@ -1,0 +1,203 @@
+{
+  "format": "ielts100-chunks",
+  "version": 1,
+  "title": "原创示例词伙",
+  "sentences": [
+    {
+      "id": "demo-01",
+      "number": 1,
+      "chinese": "午饭后，我通常沿着河边散步。",
+      "english": "I usually take a walk along the river after lunch.",
+      "chunks": [
+        {
+          "id": "demo-01-c01",
+          "english": "take a walk",
+          "meaning": "散步",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "walk 是单数可数名词，这个搭配里的 a 不漏。",
+              "focus": [
+                "a walk"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-01-c02",
+          "english": "after lunch",
+          "meaning": "午饭后",
+          "source": "hint",
+          "notes": []
+        }
+      ]
+    },
+    {
+      "id": "demo-02",
+      "number": 2,
+      "chinese": "她把钥匙放在门边的蓝色盒子里。",
+      "english": "She keeps her keys in a blue box by the door.",
+      "chunks": [
+        {
+          "id": "demo-02-c01",
+          "english": "her keys",
+          "meaning": "她的钥匙",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "her 是物主代词；keys 为复数，保留 -s。",
+              "focus": [
+                "her",
+                "keys"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-02-c02",
+          "english": "by the door",
+          "meaning": "在门边",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "在门边用 by；the 不漏。",
+              "focus": [
+                "by the door"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-03",
+      "number": 3,
+      "chinese": "我们可以周六早上一起去买水果。",
+      "english": "We can buy some fruit together on Saturday morning.",
+      "chunks": [
+        {
+          "id": "demo-03-c01",
+          "english": "together",
+          "meaning": "一起",
+          "source": "hint",
+          "notes": []
+        },
+        {
+          "id": "demo-03-c02",
+          "english": "on Saturday morning",
+          "meaning": "在周六早上",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "特定某天的早晨用 on；Saturday 按专有名词书写。",
+              "focus": [
+                "on Saturday morning"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-04",
+      "number": 4,
+      "chinese": "这家小咖啡馆在下雨天格外安静。",
+      "english": "This little cafe is especially quiet on rainy days.",
+      "chunks": [
+        {
+          "id": "demo-04-c01",
+          "english": "especially quiet",
+          "meaning": "格外安静",
+          "source": "hint",
+          "notes": []
+        },
+        {
+          "id": "demo-04-c02",
+          "english": "on rainy days",
+          "meaning": "在下雨天",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "表示在下雨天用 on；days 为复数。",
+              "focus": [
+                "on rainy days"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-05",
+      "number": 5,
+      "chinese": "我忘了给窗边的植物浇水。",
+      "english": "I forgot to water the plant by the window.",
+      "chunks": [
+        {
+          "id": "demo-05-c01",
+          "english": "forgot to",
+          "meaning": "忘记去做",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "forgot 是 forget 的过去式；to 后接动词原形。",
+              "focus": [
+                "forgot to"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-05-c02",
+          "english": "water the plant",
+          "meaning": "给植物浇水",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "water 这里是动词；plant 前的 the 不漏。",
+              "focus": [
+                "the plant"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo-06",
+      "number": 6,
+      "chinese": "如果公交车晚点，我们就步行回家。",
+      "english": "If the bus is late, we will walk home.",
+      "chunks": [
+        {
+          "id": "demo-06-c01",
+          "english": "If the bus is late",
+          "meaning": "如果公交车晚点",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "bus 为单数，配 is；the 不漏。",
+              "focus": [
+                "the bus is"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "demo-06-c02",
+          "english": "walk home",
+          "meaning": "步行回家",
+          "source": "hint",
+          "notes": [
+            {
+              "text": "home 这里直接跟在 walk 后，不加 to。",
+              "focus": [
+                "walk home"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -48,6 +48,36 @@
 
 「导出进度备份」下载一个含题库与进度的 JSON 文件。换设备后用同一个导入入口恢复。「重置学习进度」仅重置本工具的进度，保留题库，并要求确认。
 
+## 词伙页
+
+从首页右上角「词伙」进入 `chunks.html`。浏览模式按原句序显示英文词伙、中文释义、完整原句与易错点，方向键切换句子；默写模式只显示中文释义和中文语境，核对后才显示英文与语法提醒。Enter 核对、隐藏答案重写、下一词伙。判分忽略大小写和标点，冠词、时态、单复数须匹配原词伙；同义表达不由程序判定。
+
+对错按词伙分别累计，订正另标；一轮后可重练全部或只练错过的。浏览位置、输入、核对结果、逐次作答记录自动保存。底部折叠记录可按对错筛选、导出备份；设置中可导入题库/备份、仅重置词伙记录。当前词伙及相同英文词伙的旧答案在默写前隐藏。
+
+词伙页使用独立的本地存储键 `ielts100.chunks.bank.v1` / `ielts100.chunks.progress.v1`，不修改整句题库、进度和语音包；夜间模式与整句页共用偏好。公开 `chunks-example.json` 只有 6 句原创示例。正式词伙题库通过设置本机导入，不进入仓库；换浏览器或设备需导入本机题库/词伙备份。
+
+词伙题库格式：
+
+```json
+{
+  "format":"ielts100-chunks", "version":1, "title":"我的词伙题库",
+  "sentences":[{
+    "id":"my-001", "number":1,
+    "chinese":"午饭后，我通常沿着河边散步。",
+    "english":"I usually take a walk along the river after lunch.",
+    "chunks":[{
+      "id":"my-001-c01", "english":"take a walk", "meaning":"散步",
+      "source":"hint",
+      "notes":[{"text":"冠词 a 不漏。", "focus":["a walk"]}]
+    }], "notes":[]
+  }]
+}
+```
+
+`source` 取 `hint`（原词伙提示）或 `supplement`（补充，页面会标明）；`meaningEdited:true` 标明释义校对。英文词伙必须是完整原句的原样子串，编号、ID 不重复。`notes` 为可选易错点；`focus` 必须原样出现在完整英文原句中。全句的提醒放在句子层的 `notes`。词伙备份格式为 `ielts100-chunks-backup`，包含题库及自己的进度。
+
+验证：`node --test tests/chunks-core.test.mjs`；`tests/chunks.browser.mjs` 验证浏览、无提示默写、订正、整轮、独立存储、备份与手机视口。可通过本机环境变量 `CHUNKS_FILE` 传入私人词伙题库进行整轮验证，不作为公开测试夹具。
+
 ## 本地运行与验证
 
 通过 HTTP 打开，不要直接双击 HTML（浏览器会限制读取 JSON 文件）：
