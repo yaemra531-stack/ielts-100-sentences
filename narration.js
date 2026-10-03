@@ -10,21 +10,21 @@ function openAudioDatabase() {
     request.onblocked = () => reject(new Error('请关闭其他练习标签后重试导入。'));
   });
 }
-async function storedPack(value) {
+async function storedPack(value,key='current') {
   const db = await openAudioDatabase();
   try {
     return await new Promise((resolve,reject) => {
       const transaction = db.transaction('packs',value ? 'readwrite' : 'readonly');
       const store = transaction.objectStore('packs');
-      const request = value ? store.put(value,'current') : store.get('current');
+      const request = value ? store.put(value,key) : store.get(key);
       transaction.oncomplete = () => resolve(request.result);
       transaction.onabort = transaction.onerror = () => reject(new Error('语音包保存失败，原语音包仍保留。'));
     });
   } finally { db.close(); }
 }
 
-function decodePack(raw) {
-  if (raw?.format !== 'ielts100-audio' || raw.version !== 1 || !Array.isArray(raw.entries) || !raw.entries.length || raw.entries.length > 1000) throw new Error('请选择正确的语音包 JSON。');
+function decodePack(raw,format='ielts100-audio') {
+  if (raw?.format !== format || raw.version !== 1 || !Array.isArray(raw.entries) || !raw.entries.length || raw.entries.length > 1000) throw new Error('请选择正确的语音包 JSON。');
   if (typeof raw.voice !== 'string' || !raw.voice.trim() || raw.voice.length > 120) throw new Error('语音包缺少音色名称。');
   const keys = new Set();
   const entries = raw.entries.map((entry,index) => {
@@ -46,7 +46,7 @@ function browserVoice() {
   return british.find(v=>/sonia|libby|serena|kate|martha|flo|hazel|amy/i.test(v.name)) || british[0] || voices[0] || null;
 }
 
-export function createNarration(onChange = () => {}) {
+export function createNarration(onChange = () => {},{packKey='current',format='ielts100-audio'}={}) {
   let clips = new Map(), voiceName = '', player = null, objectUrl = null, generation = 0, utterance = null;
   let state = {playing:false,message:''};
   const update = (playing,message='') => { state={playing,message}; onChange(state); };
@@ -98,18 +98,19 @@ export function createNarration(onChange = () => {}) {
   }
   return {
     stop,play,describe,
+    has: text => clips.has(audioKey(text)),
     get state() { return state; },
     summary(bank) {
       const count = bank ? bank.sentences.filter(q=>clips.has(audioKey(q.answers[0]))).length : 0;
       return clips.size ? `${voiceName} · 当前题库 ${count} / ${bank?.sentences.length || 0} 句有本机音频` : '未导入语音包，使用浏览器提供的英文语音。';
     },
     async load() {
-      try { const pack = await storedPack(); if (pack?.entries) applyPack(pack); } catch {}
+      try { const pack = await storedPack(undefined,packKey); if (pack?.entries) applyPack(pack); } catch {}
       onChange(state);
     },
     async importPack(raw) {
-      const pack = decodePack(raw);
-      await storedPack(pack);
+      const pack = decodePack(raw,format);
+      await storedPack(pack,packKey);
       stop(); applyPack(pack); onChange(state);
       return clips.size;
     }
