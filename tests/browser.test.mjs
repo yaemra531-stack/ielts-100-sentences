@@ -104,7 +104,7 @@ try{
     await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-correction.png`,out)),fullPage:true});
     await mp.locator('#next-button').tap();assert.equal(await mp.locator('#question-number').textContent(),'02 / 06');
     await mp.locator('#theme-toggle').tap();assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
-    await mp.reload();await mp.locator('#answer').waitFor({state:'visible'});assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
+    await mp.reload();await mp.waitForFunction(()=>!document.getElementById('answer').disabled);assert.equal(await mp.evaluate(()=>document.documentElement.dataset.theme),'dark');
     await mp.screenshot({path:fileURLToPath(new URL(`mobile-${width}-dark.png`,out)),fullPage:true});
     assert.equal(await mp.locator('.journal-item').count(),2);assert.match(await mp.locator('#journal-list').textContent(),/订正/);
     const mobileExport=mp.waitForEvent('download');await mp.locator('#log-export').tap();const mobileLog=await mobileExport;assert.ok(mobileLog);
