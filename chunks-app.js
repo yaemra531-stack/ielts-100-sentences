@@ -108,7 +108,7 @@ function renderLog(){
     para(item,'原词伙','answer-label');const ref=para(item,'');difference(ref,c.english,diff.targetMarks,'word-needed');$('chunk-log-list').append(item);
   });$('chunk-log-more').hidden=entries.length<=logLimit;
 }
-function render(){if(!state)return;const stats=chunkStats(state);$('chunk-total').textContent=`${bank.sentences.length} 句 · ${flat.length} 项词伙`;$('chunk-practised').textContent=`已练 ${stats.practised} 项`;$('chunk-correct').textContent=stats.correct;$('chunk-wrong').textContent=stats.wrong;$('chunk-bank-label').textContent=bank.title;$('chunk-settings-bank').textContent=`${bank.title} · ${bank.sentences.length} 句 / ${flat.length} 项词伙`;
+function render(){if(!state)return;const stats=chunkStats(state);const attempts=stats.correct+stats.wrong;$('chunk-total').textContent=`${bank.sentences.length} 句 · ${flat.length} 项词伙`;$('chunk-practised').textContent=`已练 ${stats.practised} 项`;if($('chunk-attempts'))$('chunk-attempts').textContent=attempts;$('chunk-correct').textContent=stats.correct;if($('chunk-wrong'))$('chunk-wrong').textContent=stats.wrong;$('chunk-bank-label').textContent=bank.title;$('chunk-settings-bank').textContent=`${bank.title} · ${bank.sentences.length} 句 / ${flat.length} 项词伙`;
   const browse=state.mode==='browse';$('browse-panel').hidden=!browse;$('drill-panel').hidden=browse;$('browse-mode').setAttribute('aria-pressed',String(browse));$('drill-mode').setAttribute('aria-pressed',String(!browse));
   if(browse)renderBrowse();else renderDrill();renderLog();renderAudio();
 }
