@@ -20,7 +20,7 @@ function renderAudio(){
   $('chunk-auto-audio').checked=autoAudio;
   document.querySelectorAll('[data-chunk-audio]').forEach(button=>{
     const playing=activeAudio?.kind==='chunk'&&activeAudio.text===button.dataset.chunkAudio&&chunkAudio.state.playing;
-    button.textContent=playing?'■':'▶';button.setAttribute('aria-pressed',String(Boolean(playing)));
+    button.textContent=`${button.dataset.chunkKey} ${playing?'■':'▶'}`;button.setAttribute('aria-pressed',String(Boolean(playing)));
     button.setAttribute('aria-label',`${playing?'停止':'朗读'}词伙：${button.dataset.chunkAudio}`);
   });
   const c=byId?.get(state?.active?.id),visible=state?.mode==='drill'&&Boolean(state.active?.result);
@@ -34,7 +34,7 @@ function renderAudio(){
   }
   if(bank){const count=flat.filter(c=>chunkAudio.has(c.english)).length;const first=flat.find(c=>chunkAudio.has(c.english));$('chunk-audio-bank').textContent=first?`${chunkAudio.describe(first.english)} · ${count} / ${flat.length} 项词伙有录音`:'未导入词伙录音，使用浏览器提供的英文语音。';$('chunk-sentence-audio-bank').textContent=sentenceAudio.summary({sentences:bank.sentences.map(s=>({answers:[s.english]}))});}
 }
-function chunkPlayButton(text){const b=document.createElement('button');b.type='button';b.className='chunk-play';b.dataset.chunkAudio=text;b.onclick=()=>playAudio('chunk',text);return b;}
+function chunkPlayButton(text,number){const b=document.createElement('button');b.type='button';b.className='chunk-play';b.dataset.chunkAudio=text;b.dataset.chunkKey=String(number);b.title=`按 ${number} 朗读 / 停止`;b.setAttribute('aria-keyshortcuts',String(number));b.onclick=()=>playAudio('chunk',text);return b;}
 $('chunk-replay').onclick=()=>{const c=byId?.get(state?.active?.id);if(state?.mode==='drill'&&state.active?.result)playAudio('chunk',c.english);};
 $('browse-sentence-play').onclick=()=>{if(state?.mode==='browse')playAudio('sentence',bank.sentences[state.browseIndex].english);};
 $('drill-sentence-play').onclick=()=>{const c=byId?.get(state?.active?.id);if(state?.mode==='drill'&&state.active?.result)playAudio('sentence',c.sentence.english);};
@@ -51,7 +51,7 @@ function setBank(value){bank=value;flat=flattenChunks(bank);byId=new Map(flat.ma
 let theme=null;
 const systemTheme=matchMedia('(prefers-color-scheme: dark)');
 try{const choice=localStorage.getItem(THEME_KEY);if(['dark','light'].includes(choice))theme=choice;}catch{}
-function applyTheme(){const dark=(theme||(systemTheme.matches?'dark':'light'))==='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('theme-toggle').textContent=dark?'☀':'☾';$('theme-toggle').setAttribute('aria-pressed',String(dark));$('theme-toggle').setAttribute('aria-label',dark?'切换日间模式':'切换夜间模式');}
+function applyTheme(){const dark=(theme||(systemTheme.matches?'dark':'light'))==='dark';document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark?'#181e1b':'#f4f3ee');$('theme-toggle').textContent=dark?'☀':'☾';$('theme-toggle').setAttribute('aria-pressed',String(dark));$('theme-toggle').setAttribute('aria-label',dark?'切换日间模式':'切换夜间模式');}
 $('theme-toggle').onclick=()=>{theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem(THEME_KEY,theme);}catch{}applyTheme();};
 systemTheme.addEventListener('change',()=>{if(!theme)applyTheme();});applyTheme();
 
@@ -71,7 +71,7 @@ function renderBrowse(){
   const s=bank.sentences[state.browseIndex];$('sentence-jump').value=state.browseIndex;
   $('browse-number').textContent=`${String(s.number).padStart(2,'0')} / ${bank.sentences.length}`;$('browse-chinese').textContent=s.chinese;
   $('chunk-cards').replaceChildren();
-  for(const c of s.chunks){const card=document.createElement('section');card.className='chunk-item';const head=document.createElement('div');head.className='chunk-item-heading';const line=document.createElement('div');line.className='chunk-english-line';const english=para(line,'','chunk-english');highlighted(english,c.english,c.notes.flatMap(n=>n.focus).filter(f=>c.english.includes(f)));line.append(chunkPlayButton(c.english));head.append(line);para(head,c.meaning,'chunk-chinese');card.append(head);if(c.source==='supplement')para(card,'补充词伙','chunk-source-label');if(c.meaningEdited)para(card,'释义校对','chunk-source-label');const n=document.createElement('div');notes(n,c.notes);card.append(n);$('chunk-cards').append(card);}
+  for(const [i,c] of s.chunks.entries()){const card=document.createElement('section');card.className='chunk-item';const head=document.createElement('div');head.className='chunk-item-heading';const line=document.createElement('div');line.className='chunk-english-line';const english=para(line,'','chunk-english');highlighted(english,c.english,c.notes.flatMap(n=>n.focus).filter(f=>c.english.includes(f)));line.append(chunkPlayButton(c.english,i+1));head.append(line);para(head,c.meaning,'chunk-chinese');card.append(head);if(c.source==='supplement')para(card,'补充词伙','chunk-source-label');if(c.meaningEdited)para(card,'释义校对','chunk-source-label');const n=document.createElement('div');notes(n,c.notes);card.append(n);$('chunk-cards').append(card);}
   highlighted($('browse-source'),s.english,[...s.notes,...s.chunks.flatMap(c=>c.notes)].flatMap(n=>n.focus));notes($('browse-source-notes'),s.notes);
   $('browse-previous').disabled=state.browseIndex===0;$('browse-next').disabled=state.browseIndex===bank.sentences.length-1;
   renderAudio();
@@ -126,7 +126,12 @@ $('round-all').onclick=()=>round(false);$('round-errors').onclick=()=>round(true
 $('chunk-log-filter').onchange=()=>{logLimit=20;renderLog();};$('chunk-log-more').onclick=()=>{logLimit+=20;renderLog();};
 document.addEventListener('keydown',e=>{
   if(!state||e.isComposing||e.repeat||e.ctrlKey||e.metaKey||e.altKey||$('chunk-settings').open)return;
-  if(state.mode==='browse'&&['ArrowLeft','ArrowRight'].includes(e.key)&&!e.target.matches('input,select,textarea')){e.preventDefault();browseStep(e.key==='ArrowLeft'?-1:1);}
+  if(state.mode==='browse'&&!e.shiftKey&&!e.target.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])')){
+    if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();browseStep(e.key==='ArrowLeft'?-1:1);}
+    else if(/^[1-8]$/.test(e.key)){const c=bank.sentences[state.browseIndex].chunks[Number(e.key)-1];if(c){e.preventDefault();playAudio('chunk',c.english);}}
+    else if(e.key==='0'||(e.key===' '&&!e.target.closest('button,a,summary'))){e.preventDefault();$('browse-sentence-play').click();}
+    else if(e.key==='Escape'){e.preventDefault();stopAudio();}
+  }
   if(state.mode==='drill'&&e.key==='Enter'&&state.active&&(!e.target.matches('button,a,select,summary')||e.target===$('chunk-retry')||e.target===$('chunk-next'))){e.preventDefault();if(state.active.result)(state.active.result.correct?$('chunk-next'):$('chunk-retry')).click();else $('chunk-form').requestSubmit();}
 });
 document.addEventListener('keydown',e=>{if(e.altKey&&!e.ctrlKey&&!e.metaKey&&e.key.toLowerCase()==='r'&&!e.repeat&&!e.isComposing&&!$('chunk-settings').open&&state?.mode==='drill'&&state.active?.result){e.preventDefault();$('chunk-replay').click();}});

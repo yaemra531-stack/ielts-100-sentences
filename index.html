@@ -4,10 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f4f3ee">
+  <style>html{background:#f4f3ee;color-scheme:light}html[data-theme="dark"]{background:#181e1b;color-scheme:dark}</style>
+  <script>
+    (() => {
+      let choice;
+      try { choice = localStorage.getItem('ielts100.theme.v1'); } catch {}
+      const dark = (['dark','light'].includes(choice) ? choice : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.querySelector('meta[name="theme-color"]').content = dark ? '#181e1b' : '#f4f3ee';
+    })();
+  </script>
   <meta name="description" content="看到中文，敲出英文。一句接一句的轻量默写练习。">
   <title>顾家北100句 · 默写</title>
   <link rel="stylesheet" href="style.css?v=20261003-6">
-  <script type="module" src="app.js?v=20261003-5"></script>
+  <script type="module" src="app.js?v=20261008-1"></script>
 </head>
 <body>
   <div class="page">

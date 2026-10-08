@@ -12,6 +12,7 @@ try { const saved = localStorage.getItem(THEME_KEY); if (['light','dark'].includ
 function applyTheme() {
   const dark = (themeChoice || (systemTheme.matches ? 'dark' : 'light')) === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark ? '#181e1b' : '#f4f3ee');
   $('theme-toggle').textContent = dark ? '☀' : '☾';
   $('theme-toggle').setAttribute('aria-pressed',String(dark));
   $('theme-toggle').setAttribute('aria-label',dark ? '切换日间模式' : '切换夜间模式');

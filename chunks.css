@@ -5,3 +5,5 @@
 .chunk-english-line{display:flex;align-items:center;gap:10px;min-width:0}.chunk-play{flex-shrink:0;width:32px;height:32px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--muted);font-size:11px}.chunk-play:hover,.chunk-play[aria-pressed="true"]{background:var(--green-soft);color:var(--green)}.chunk-audio-note{color:var(--muted);font-size:10px;line-height:1.6;overflow-wrap:anywhere}.chunk-feedback .narration-controls{margin-top:-10px;margin-bottom:16px}.chunk-english-line .chunk-english{min-width:0}
 
 #chunk-meaning,.chunk-chinese,.mode-bar>span{overflow-wrap:anywhere}
+
+.chunk-play{width:46px;border-radius:16px;font-variant-numeric:tabular-nums}.browse-keyboard{line-height:1.8;overflow-wrap:anywhere}
