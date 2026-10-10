@@ -1,5 +1,6 @@
-import {tokens,grade,normalize} from './core.js?v=20261003-5';
-import {validateChunks,flattenChunks,freshChunks,restoreChunks,submitChunk,retryChunk,nextChunk,startChunkRound,chunkStats} from './chunks-core.js?v=20261003-1';
+import {tokens,grade,normalize} from './core.js?v=20261010-1';
+import {validateChunks,flattenChunks,freshChunks,restoreChunks,submitChunk,retryChunk,nextChunk,startChunkRound,chunkStats} from './chunks-core.js?v=20261010-1';
+import {GROUP_KEY, selectedGroup, groupBank, renderGroupPicker, groupPickerKey, initChunkGroups, switchChunkGroup, rememberChunkGroup} from './groups.js?v=20261010-1';
 import {createNarration} from './narration.js?v=20261003-6';
 
 const BANK_KEY='ielts100.chunks.bank.v1',STATE_KEY='ielts100.chunks.progress.v1',THEME_KEY='ielts100.theme.v1';
@@ -45,7 +46,7 @@ void Promise.all([chunkAudio.load(),sentenceAudio.load()]);
 function notice(message){$('chunk-notice').textContent=message;$('chunk-notice').hidden=false;}
 function storageWarning(){storageOkay=false;$('chunk-save-status').textContent='词伙记录暂时无法保存';notice('浏览器暂时无法保存词伙记录。离开前请导出词伙备份。');}
 function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch{storageWarning();return null;}}
-function save(replace=false){if(!state)return;try{const existing=JSON.parse(localStorage.getItem(STATE_KEY)||'null');if(!replace&&existing?.epoch&&existing.epoch!==state.epoch){notice('另一词伙页面已重置记录或恢复备份。请刷新本页后继续，避免覆盖。');return;}if(!replace&&existing?.log){const merged=restoreChunks(bank,{...state,log:[...existing.log,...state.log]});state.log=merged.log.sort((a,b)=>(a.timestamp||'').localeCompare(b.timestamp||''));}localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch{storageWarning();}}
+function save(replace=false){if(!state)return;try{const existing=JSON.parse(localStorage.getItem(STATE_KEY)||'null');if(!replace&&existing?.epoch&&existing.epoch!==state.epoch){notice('另一词伙页面已重置记录或恢复备份。请刷新本页后继续，避免覆盖。');return;}if(!replace&&existing?.log){const merged=restoreChunks(bank,{...state,log:[...existing.log,...state.log]});state.log=merged.log.sort((a,b)=>(a.timestamp||'').localeCompare(b.timestamp||''));}rememberChunkGroup(state);localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch{storageWarning();}}
 function setBank(value){bank=value;flat=flattenChunks(bank);byId=new Map(flat.map(c=>[c.id,c]));$('sentence-jump').replaceChildren(...bank.sentences.map((s,i)=>{const option=document.createElement('option');option.value=i;option.textContent=`第 ${String(s.number).padStart(2,'0')} 句`;return option;}));}
 
 let theme=null;
@@ -73,7 +74,8 @@ function renderBrowse(){
   $('chunk-cards').replaceChildren();
   for(const [i,c] of s.chunks.entries()){const card=document.createElement('section');card.className='chunk-item';const head=document.createElement('div');head.className='chunk-item-heading';const line=document.createElement('div');line.className='chunk-english-line';const english=para(line,'','chunk-english');highlighted(english,c.english,c.notes.flatMap(n=>n.focus).filter(f=>c.english.includes(f)));line.append(chunkPlayButton(c.english,i+1));head.append(line);para(head,c.meaning,'chunk-chinese');card.append(head);if(c.source==='supplement')para(card,'补充词伙','chunk-source-label');if(c.meaningEdited)para(card,'释义校对','chunk-source-label');const n=document.createElement('div');notes(n,c.notes);card.append(n);$('chunk-cards').append(card);}
   highlighted($('browse-source'),s.english,[...s.notes,...s.chunks.flatMap(c=>c.notes)].flatMap(n=>n.focus));notes($('browse-source-notes'),s.notes);
-  $('browse-previous').disabled=state.browseIndex===0;$('browse-next').disabled=state.browseIndex===bank.sentences.length-1;
+  const group=selectedGroup(bank,state);
+  $('browse-previous').disabled=state.browseIndex===group.start;$('browse-next').disabled=state.browseIndex===group.end-1;
   renderAudio();
 }
 function renderDrill(){
@@ -108,20 +110,39 @@ function renderLog(){
     para(item,'原词伙','answer-label');const ref=para(item,'');difference(ref,c.english,diff.targetMarks,'word-needed');$('chunk-log-list').append(item);
   });$('chunk-log-more').hidden=entries.length<=logLimit;
 }
-function render(){if(!state)return;const stats=chunkStats(state);const attempts=stats.correct+stats.wrong;$('chunk-total').textContent=`${bank.sentences.length} 句 · ${flat.length} 项词伙`;$('chunk-practised').textContent=`已练 ${stats.practised} 项`;if($('chunk-attempts'))$('chunk-attempts').textContent=attempts;$('chunk-correct').textContent=stats.correct;if($('chunk-wrong'))$('chunk-wrong').textContent=stats.wrong;$('chunk-bank-label').textContent=bank.title;$('chunk-settings-bank').textContent=`${bank.title} · ${bank.sentences.length} 句 / ${flat.length} 项词伙`;
+function render(){if(!state)return;renderGroups();const scope=groupBank(bank,state), scopeChunks=flattenChunks(scope), ids=new Set(scopeChunks.map(c=>c.id));const stats=chunkStats({log:state.log.filter(e=>ids.has(e.chunkId))});const attempts=stats.correct+stats.wrong;$('chunk-total').textContent=`${scope.sentences.length} 句 · ${scopeChunks.length} 项词伙`;$('chunk-practised').textContent=`已练 ${stats.practised} 项`;if($('chunk-attempts'))$('chunk-attempts').textContent=attempts;$('chunk-correct').textContent=stats.correct;if($('chunk-wrong'))$('chunk-wrong').textContent=stats.wrong;$('chunk-bank-label').textContent=bank.title;$('chunk-settings-bank').textContent=`${bank.title} · ${bank.sentences.length} 句 / ${flat.length} 项词伙`;
   const browse=state.mode==='browse';$('browse-panel').hidden=!browse;$('drill-panel').hidden=browse;$('browse-mode').setAttribute('aria-pressed',String(browse));$('drill-mode').setAttribute('aria-pressed',String(!browse));
   if(browse)renderBrowse();else renderDrill();renderLog();renderAudio();
 }
+function setupGroups(source,useShared=true){
+  initChunkGroups(bank,state,source);switchChunkGroup(bank,state,useShared?(read(GROUP_KEY)??state.group):state.group);
+  try{localStorage.setItem(GROUP_KEY,String(state.group));}catch{storageWarning();}
+}
+function renderGroups(){
+  const group=selectedGroup(bank,state);
+  renderGroupPicker($('group-select'),bank,state);
+  $('group-summary').textContent=`先练本组词伙，再写这 ${group.sentences.length} 句`;
+  $('sentence-jump').replaceChildren(...group.sentences.map((s,i)=>{const option=document.createElement('option');option.value=group.start+i;option.textContent=`第 ${String(s.number).padStart(2,'0')} 句`;return option;}));
+  $('next-group').hidden=state.group>=Math.ceil(bank.sentences.length/10);
+}
+function changeGroup(value,broadcast=true){
+  if(!state)return;stopAudio();switchChunkGroup(bank,state,value);save();
+  if(broadcast)try{localStorage.setItem(GROUP_KEY,String(state.group));}catch{storageWarning();}
+  if(storageOkay)$('chunk-notice').hidden=true;render();
+}
+$('group-select').onchange=e=>changeGroup(Number(e.target.value));
+$('group-select').onkeydown=e=>groupPickerKey(e,bank,state,changeGroup);
+$('next-group').onclick=()=>{changeGroup(state.group+1);focusDrill();};
 function focusDrill(){if(state?.mode!=='drill'||$('chunk-settings').open)return;const el=state.active?.result?(state.active.result.correct?$('chunk-next'):$('chunk-retry')):state.active?$('chunk-answer'):$('round-all');el.focus({preventScroll:true});}
 function changeMode(mode){if(!state)return;stopAudio();state.mode=mode;save();render();if(mode==='drill')focusDrill();}
 $('browse-mode').onclick=()=>changeMode('browse');$('drill-mode').onclick=()=>changeMode('drill');
-function browseStep(delta){if(!state)return;stopAudio();state.browseIndex=Math.max(0,Math.min(bank.sentences.length-1,state.browseIndex+delta));save();renderBrowse();}
+function browseStep(delta){if(!state)return;stopAudio();const group=selectedGroup(bank,state);state.browseIndex=Math.max(group.start,Math.min(group.end-1,state.browseIndex+delta));save();renderBrowse();}
 $('browse-previous').onclick=()=>browseStep(-1);$('browse-next').onclick=()=>browseStep(1);$('sentence-jump').onchange=e=>{stopAudio();state.browseIndex=Number(e.target.value);save();renderBrowse();};
 $('chunk-answer').oninput=e=>{if(state?.active){state.active.draft=e.target.value;save();}};
 $('chunk-form').onsubmit=e=>{e.preventDefault();if(!state?.active||state.active.result)return;const answer=$('chunk-answer').value;if(!normalize(answer)){notice('先写出英文词伙，再核对。');$('chunk-answer').focus();return;}submitChunk(bank,state,answer);save();render();focusDrill();if(autoAudio)playAudio('chunk',byId.get(state.active.id).english);};
 $('chunk-retry').onclick=()=>{if(retryChunk(state)){stopAudio();save();render();focusDrill();}};
 $('chunk-next').onclick=()=>{if(nextChunk(state)){stopAudio();save();render();focusDrill();}};
-function round(errors){stopAudio();startChunkRound(bank,state,errors);save();render();focusDrill();}
+function round(errors){stopAudio();startChunkRound(groupBank(bank,state),state,errors);save();render();focusDrill();}
 $('round-all').onclick=()=>round(false);$('round-errors').onclick=()=>round(true);
 $('chunk-log-filter').onchange=()=>{logLimit=20;renderLog();};$('chunk-log-more').onclick=()=>{logLimit+=20;renderLog();};
 document.addEventListener('keydown',e=>{
@@ -141,21 +162,22 @@ function exportBackup(){if(!state)return;const backup={format:'ielts100-chunks-b
 $('chunk-export').onclick=exportBackup;$('settings-export').onclick=exportBackup;
 $('chunk-import').onchange=async e=>{
   const file=e.target.files[0];e.target.value='';if(!file)return;
-  try{if(file.size>20*1024*1024)throw new Error('请选择小于 20 MB 的 JSON。');const raw=JSON.parse(await file.text());const backup=raw.format==='ielts100-chunks-backup';if(backup&&raw.version!==1)throw new Error('词伙备份版本不支持。');const nextBank=validateChunks(backup?raw.bank:raw);const nextState=backup?restoreChunks(nextBank,raw.progress):restoreChunks(nextBank,state);if(!confirm(backup?'恢复此词伙备份？只替换词伙页的数据。':'导入此词伙题库？相同词伙的记录会保留，只影响词伙页。'))return;
-    stopAudio();setBank(nextBank);state=nextState;try{localStorage.setItem(BANK_KEY,JSON.stringify(bank));localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch{storageWarning();}render();settingsMessage(`已导入 ${bank.sentences.length} 句、${flat.length} 项词伙。整句页面的数据未改变。`);
+  try{if(file.size>20*1024*1024)throw new Error('请选择小于 20 MB 的 JSON。');const raw=JSON.parse(await file.text());const backup=raw.format==='ielts100-chunks-backup';if(backup&&raw.version!==1)throw new Error('词伙备份版本不支持。');const nextBank=validateChunks(backup?raw.bank:raw);const source=backup?raw.progress:state;const nextState=restoreChunks(nextBank,source);if(!confirm(backup?'恢复此词伙备份？只替换词伙页的数据。':'导入此词伙题库？相同词伙的记录会保留，只影响词伙页。'))return;
+    stopAudio();setBank(nextBank);state=nextState;setupGroups(source,!backup);rememberChunkGroup(state);try{localStorage.setItem(BANK_KEY,JSON.stringify(bank));localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch{storageWarning();}render();settingsMessage(`已导入 ${bank.sentences.length} 句、${flat.length} 项词伙。整句页面的数据未改变。`);
   }catch(error){settingsMessage(`${error instanceof SyntaxError?'JSON 格式不正确。':error.message} 当前词伙题库与记录未改变。`,true);}
 };
-$('chunk-reset').onclick=()=>{if(!confirm('清空本页的词伙作答记录和位置？整句学习进度与语音包不受影响。'))return;stopAudio();state=freshChunks(bank);save(true);render();settingsMessage('词伙记录已重置。');};
+$('chunk-reset').onclick=()=>{if(!confirm('清空全部分组的词伙作答记录和位置？整句学习进度与语音包不受影响。'))return;stopAudio();state=freshChunks(bank);setupGroups(null);save(true);render();settingsMessage('词伙记录已重置。');};
 let syncTimer;
 window.addEventListener('storage',e=>{
+  if(e.key===GROUP_KEY && state){const latest=read(GROUP_KEY);if(latest!==state.group)changeGroup(latest,false);return;}
   if(e.key===AUDIO_PREF){autoAudio=e.newValue!=='off';if(!autoAudio)stopAudio();renderAudio();return;}
   if(e.key===THEME_KEY){theme=['dark','light'].includes(e.newValue)?e.newValue:null;applyTheme();return;}
-  if(e.key!==STATE_KEY&&e.key!==BANK_KEY)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{try{stopAudio();const next=read(BANK_KEY);if(next)setBank(validateChunks(next));state=restoreChunks(bank,read(STATE_KEY));render();notice('已同步另一词伙页面的最新记录。');}catch{notice('另一页面的词伙题库无法读取，请先导出本页备份。');}},50);
+  if(e.key!==STATE_KEY&&e.key!==BANK_KEY)return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{try{stopAudio();const next=read(BANK_KEY);if(next)setBank(validateChunks(next));const saved=read(STATE_KEY);state=restoreChunks(bank,saved);setupGroups(saved);render();notice('已同步另一词伙页面的最新记录。');}catch{notice('另一页面的词伙题库无法读取，请先导出本页备份。');}},50);
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAudio();});
 window.addEventListener('pagehide',stopAudio);
 async function init(){
-  try{const saved=read(BANK_KEY);if(saved)setBank(validateChunks(saved));else{const res=await fetch('./chunks-example.json');if(!res.ok)throw new Error('示例词伙题库读取失败。');setBank(validateChunks(await res.json()));}state=restoreChunks(bank,read(STATE_KEY));render();save();focusDrill();}
+  try{const saved=read(BANK_KEY);if(saved)setBank(validateChunks(saved));else{const res=await fetch('./chunks-example.json');if(!res.ok)throw new Error('示例词伙题库读取失败。');setBank(validateChunks(await res.json()));}const savedState=read(STATE_KEY);state=restoreChunks(bank,savedState);setupGroups(savedState);render();save();focusDrill();}
   catch(error){notice(`词伙页暂时无法加载：${error.message} 请在网站地址中打开，或通过设置导入词伙题库。`);}
 }
 void init();

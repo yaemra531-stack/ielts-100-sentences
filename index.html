@@ -16,8 +16,8 @@
   </script>
   <meta name="description" content="看到中文，敲出英文。一句接一句的轻量默写练习。">
   <title>顾家北100句 · 默写</title>
-  <link rel="stylesheet" href="style.css?v=20261003-6">
-  <script type="module" src="app.js?v=20261008-1"></script>
+  <link rel="stylesheet" href="style.css?v=20261010-1">
+  <script type="module" src="app.js?v=20261010-1"></script>
 </head>
 <body>
   <div class="page">
@@ -28,9 +28,10 @@
     <main>
       <section class="intro" aria-label="学习进度">
         <div><p class="eyebrow">WRITE IT. REMEMBER IT.</p><h1>把熟悉，变成会写。</h1><p class="intro-note">看到中文，敲出英文。一句一句来。</p></div>
-        <div class="stats"><div><span id="today-count">0</span><span class="stat-label">今日默写<span id="today-attempts" class="stat-detail">0 次核对</span></span></div><div><span id="mastered-count">0<span class="stat-total"> / 6</span></span><span class="stat-label">已掌握<span class="stat-detail">独立答对两次</span></span></div></div>
+        <div class="stats"><div><span id="today-count">0</span><span class="stat-label">今日默写<span id="today-attempts" class="stat-detail">0 次核对</span></span></div><div><span id="mastered-count">0<span class="stat-total"> / 6</span></span><span class="stat-label">本组已掌握<span class="stat-detail">独立答对两次</span></span></div></div>
       </section>
       <div class="progress-track" role="progressbar" aria-label="掌握进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div>
+      <section class="group-bar" aria-label="每10句一组"><div class="group-choice"><label for="group-select">今天练哪组</label><select id="group-select" aria-label="选择句子分组"></select></div><span id="group-summary" class="group-summary"></span><a class="group-link" href="chunks.html">先练本组词伙 →</a></section>
       <p id="notice" class="notice" role="status" hidden></p>
       <section id="practice" class="practice-card" aria-label="默写练习" aria-busy="true">
         <div class="question-meta"><span id="bank-label" class="bank-label">正在加载题库</span><span id="question-number">—</span></div>
@@ -51,7 +52,7 @@
         <details id="attempt-history" class="attempt-history" hidden><summary id="history-summary">先前作答</summary><div id="history-list"></div></details>
       </section>
       <section id="complete" class="complete-card" hidden>
-        <span class="complete-mark" aria-hidden="true">✓</span><p class="eyebrow">ONE SENTENCE AT A TIME.</p><h2>这一轮，都写出来了。</h2><p id="complete-text"></p><button id="review-button" class="primary-button">再巩固一轮 <span class="button-key">↵</span></button>
+        <span class="complete-mark" aria-hidden="true">✓</span><p class="eyebrow">ONE SENTENCE AT A TIME.</p><h2>这一轮，都写出来了。</h2><p id="complete-text"></p><button id="review-button" class="primary-button">再巩固本组 <span class="button-key">↵</span></button><button id="next-group" class="secondary-button" type="button">开始下一组 →</button>
       </section>
       <div class="footnote"><span><span class="keyboard-hint">Enter 核对 / 重写 / 下一句 · Shift Enter 换行</span><span class="mobile-hint">写完核对，一句接一句。</span></span><span id="save-status">进度保存在本机</span></div>
       <section class="journal" aria-labelledby="journal-title">
@@ -69,7 +70,7 @@
     <div class="dialog-heading"><h2 id="settings-title">题库与进度</h2><button id="settings-close" class="icon-button" aria-label="关闭设置">×</button></div>
     <p class="dialog-note">题库和进度只保存在这个浏览器，不会上传。换设备前可以导出备份。</p>
     <section class="settings-section"><h3>题库</h3><p id="settings-bank"></p><label class="secondary-button file-label" for="import-file">导入题库 / 备份<input id="import-file" type="file" accept="application/json,.json"></label><a href="sentences.json" download="sentences-example.json" class="format-link">下载 JSON 格式示例 ↗</a><p class="settings-help">每句支持 answers 数组中的多个标准答案。示例句为原创，正式题库由你在本机导入。</p></section>
-    <section class="settings-section"><h3>进度</h3><div class="settings-actions"><button id="export-button" class="secondary-button">导出进度备份</button><button id="reset-button" class="danger-button">重置学习进度</button></div><p class="settings-help">掌握 = 两次连续独立答对；答错或使用提示会重新计数。备份含题库、进度和全部作答记录；重置会一并清空作答记录。</p></section>
+    <section class="settings-section"><h3>进度</h3><div class="settings-actions"><button id="export-button" class="secondary-button">导出进度备份</button><button id="reset-button" class="danger-button">重置全部整句进度</button></div><p class="settings-help">掌握 = 两次连续独立答对；答错或使用提示会重新计数。备份含题库、进度和全部作答记录；重置会清空全部分组的进度及作答记录。</p></section>
     <section class="settings-section"><h3>轻量反馈</h3><label class="feedback-setting"><input id="feedback-toggle" type="checkbox" checked>提示音与答对动画</label><div class="feedback-previews"><span>试听</span><button type="button" class="secondary-button" data-feedback-sound="correct">答对</button><button type="button" class="secondary-button" data-feedback-sound="unmatched">未匹配</button><button type="button" class="secondary-button" data-feedback-sound="empty">未填写</button></div><p class="settings-help">仅在核对时播放，答对图标轻轻弹一下，不影响继续下一句。</p></section>
     <section class="settings-section"><h3>标准答案朗读</h3><label class="feedback-setting"><input id="narration-toggle" type="checkbox" checked>核对后自动朗读一次</label><p id="narration-bank"></p><label class="secondary-button file-label" for="audio-import">导入本机语音包<input id="audio-import" type="file" accept="application/json,.json"></label><p class="settings-help">优先使用导入的 Sonia 英式女声音频；没有对应录音时使用浏览器英文语音。语音包不上传；换设备需重新导入。重写或进入下一句会停止朗读，Alt R 可重听。</p></section>
     <p id="settings-message" class="settings-message" role="status" hidden></p>

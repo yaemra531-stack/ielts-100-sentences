@@ -1,4 +1,4 @@
-import {grade,normalize} from './core.js?v=20261003-5';
+import {grade,normalize} from './core.js?v=20261010-1';
 
 export function validateChunks(raw) {
   if (raw?.format !== 'ielts100-chunks' || raw.version !== 1 || !Array.isArray(raw.sentences) || !raw.sentences.length || raw.sentences.length > 1000) throw new Error('请选择词伙题库 JSON。');

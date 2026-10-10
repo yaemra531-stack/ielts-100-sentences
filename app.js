@@ -1,4 +1,5 @@
-import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261003-5';
+import {VERSION, tokens, grade, validateBank, signature, localDate, freshProgress, restoreProgress, masteredCount, activateNext, submit, retry, restoreAttemptLog, attemptTime, attemptMode, exportAttemptMarkdown} from './core.js?v=20261010-1';
+import {GROUP_KEY, selectedGroup, groupBank, renderGroupPicker, groupPickerKey, initSentenceGroups, switchSentenceGroup, rememberSentenceGroup} from './groups.js?v=20261010-1';
 import {createFeedback} from './feedback.js?v=20261003-5';
 import {createNarration} from './narration.js?v=20261003-5';
 
@@ -100,6 +101,7 @@ function save(replaceLogs = false) {
       }
       mergeSavedLogs(existing?.attemptLog);
     }
+    rememberSentenceGroup(progress);
     localStorage.setItem(STATE_KEY, JSON.stringify(progress));
   }
   catch { storageWarning(); }
@@ -120,7 +122,11 @@ function renderStats() {
   const today = progress.daily[localDate()] || {attempts:0,ids:[]};
   $('today-count').textContent = today.ids.length;
   $('today-attempts').textContent = `${today.attempts} 次核对`;
-  const mastered = masteredCount(progress), total = bank.sentences.length;
+  const group = selectedGroup(bank,progress), total = group.sentences.length;
+  const mastered = group.sentences.filter(q=>progress.records[q.id].streak>=2).length;
+  renderGroupPicker($('group-select'),bank,progress);
+  $('group-summary').textContent = `本组 ${total} 句 · 全库已掌握 ${masteredCount(progress)} / ${bank.sentences.length}`;
+  $('next-group').hidden = progress.group >= Math.ceil(bank.sentences.length/10);
   $('mastered-count').replaceChildren(document.createTextNode(mastered));
   const denominator = document.createElement('span');
   denominator.className = 'stat-total'; denominator.textContent = ` / ${total}`;
@@ -128,7 +134,7 @@ function renderStats() {
   $('progress-fill').style.width = `${mastered / total * 100}%`;
   document.querySelector('[role="progressbar"]').setAttribute('aria-valuenow', Math.round(mastered / total * 100));
   if (storageOkay) $('save-status').textContent = '进度保存在本机';
-  $('settings-bank').textContent = `${bank.title} · ${total} 句${customBank ? ' · 本机导入' : ' · 内置示例'}`;
+  $('settings-bank').textContent = `${bank.title} · ${bank.sentences.length} 句${customBank ? ' · 本机导入' : ' · 内置示例'}`;
 }
 function renderSentence(element, text, marks = [], className = '') {
   element.replaceChildren();
@@ -231,7 +237,7 @@ function render(focus = true) {
   $('complete').hidden = Boolean(active);
   $('practice').setAttribute('aria-busy','false');
   if (!active) {
-    $('complete-text').textContent = `${bank.sentences.length} 句已掌握。每一句，都连续两次独立答对。`;
+    $('complete-text').textContent = `本组 ${selectedGroup(bank,progress).sentences.length} 句已掌握。每一句，都连续两次独立答对。`;
   } else {
     const index = bank.sentences.findIndex(q => q.id === active.id), q = bank.sentences[index], record = progress.records[q.id];
     $('bank-label').textContent = bank.title;
@@ -276,8 +282,24 @@ function checkAnswer(event) {
 function next() {
   if (!progress?.active?.result?.correct) return;
   narration.stop();
-  activateNext(bank,progress); save(); render();
+  activateNext(groupBank(bank,progress),progress); save(); render();
 }
+
+function setupGroups(source, useShared=true) {
+  initSentenceGroups(bank,progress,source);
+  switchSentenceGroup(bank,progress,useShared?(read(GROUP_KEY)??progress.group):progress.group);
+  try { localStorage.setItem(GROUP_KEY,String(progress.group)); } catch { storageWarning(); }
+}
+function changeGroup(value, broadcast=true) {
+  if(!progress)return;
+  narration.stop();switchSentenceGroup(bank,progress,value);save();
+  if(broadcast)try{localStorage.setItem(GROUP_KEY,String(progress.group));}catch{storageWarning();}
+  if(storageOkay)$('notice').hidden=true;
+  render(false);
+}
+$('group-select').onchange=e=>changeGroup(Number(e.target.value));
+$('group-select').onkeydown=e=>groupPickerKey(e,bank,progress,changeGroup);
+$('next-group').onclick=()=>{changeGroup(progress.group+1);focusAction();};
 
 $('answer-form').addEventListener('submit',checkAnswer);
 $('answer').addEventListener('input',() => {
@@ -302,7 +324,7 @@ $('retry-button').addEventListener('click',() => {
 });
 $('review-button').addEventListener('click',() => {
   if (!bank || !progress) return;
-  progress.reviewIds = bank.sentences.map(q=>q.id); activateNext(bank,progress); save(); render();
+  progress.reviewIds = selectedGroup(bank,progress).sentences.map(q=>q.id); activateNext(groupBank(bank,progress),progress); save(); render();
 });
 $('settings-open').addEventListener('click',() => {narration.stop();$('settings').showModal();});
 $('settings-close').addEventListener('click',() => $('settings').close());
@@ -314,7 +336,7 @@ $('reset-button').addEventListener('click',() => {
   if (!bank) return;
   if (!confirm(`确定重置「${bank.title}」的学习进度？题库会保留，掌握数、今日记录和全部作答记录会清空。建议先导出备份。`)) return;
   narration.stop();
-  progress = freshProgress(bank); activateNext(bank,progress); save(true); render(false);
+  progress = freshProgress(bank); setupGroups(null); save(true); render(false);
   settingsMessage('进度已重置，可以重新开始。');
 });
 $('export-button').addEventListener('click',() => {
@@ -338,9 +360,9 @@ $('import-file').addEventListener('change',async event => {
     if (!confirm(backup ? `恢复「${incoming.title}」的题库与进度？这会替换本机当前记录。` : `导入「${incoming.title}」的 ${incoming.sentences.length} 句？完全相同的 ${preserved} 句可保留进度，其余从头开始。`)) return;
     narration.stop();
     const incomingProgress = restoreProgress(incoming,source);
-    if (!incomingProgress.active) activateNext(incoming,incomingProgress);
     try { localStorage.setItem(BANK_KEY,JSON.stringify(incoming)); } catch { storageWarning(); }
     bank = incoming; progress = incomingProgress; customBank = true;
+    setupGroups(source, !backup);
     progress.logEpoch = crypto.randomUUID();
     save(true); if (storageOkay) $('notice').hidden = true;
     render(false); settingsMessage(`已导入 ${bank.sentences.length} 句${backup ? '，进度已恢复' : `，保留 ${preserved} 句的进度`}。`);
@@ -357,6 +379,7 @@ $('log-export').addEventListener('click',()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 window.addEventListener('storage',event=>{
+  if(event.key===GROUP_KEY && progress){const latest=read(GROUP_KEY);if(latest!==progress.group)changeGroup(latest,false);return;}
   if (event.key === NARRATION_KEY) {
     autoNarration = event.newValue !== 'off'; if (!autoNarration) narration.stop(); renderNarration(); return;
   }
@@ -384,8 +407,9 @@ async function init() {
       if (!response.ok) throw new Error(`题库读取失败（${response.status}）`);
       bank = validateBank(await response.json());
     }
-    progress = restoreProgress(bank,read(STATE_KEY));
-    if (!progress.active) activateNext(bank,progress);
+    const savedProgress=read(STATE_KEY);
+    progress = restoreProgress(bank,savedProgress);
+    setupGroups(savedProgress);
     save(); render();
   } catch (error) {
     $('practice').hidden = true;
