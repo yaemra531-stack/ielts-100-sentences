@@ -1,0 +1,65 @@
+[
+  {
+    "id": "Q2-0001",
+    "task": "T2",
+    "type": "opinion",
+    "source": "原创示例",
+    "prompt": "Some people believe that the best way to reduce traffic congestion in cities is to build more roads. To what extent do you agree or disagree?",
+    "pointIds": [
+      "T2-28",
+      "T2-30",
+      "T2-43"
+    ]
+  },
+  {
+    "id": "Q2-0002",
+    "task": "T2",
+    "type": "opinion",
+    "source": "原创示例",
+    "prompt": "In many countries, more and more people choose to work from home rather than in a traditional office. Do the advantages of this trend outweigh the disadvantages?",
+    "pointIds": [
+      "T2-28",
+      "T2-43",
+      "T2-64"
+    ]
+  },
+  {
+    "id": "Q2-0003",
+    "task": "T2",
+    "type": "discuss",
+    "source": "原创示例",
+    "prompt": "Some people think that universities should provide graduates with the knowledge and skills needed in the workplace. Others think that the true function of a university is to give access to knowledge for its own sake, regardless of whether the course is useful to an employer. Discuss both views and give your opinion.",
+    "pointIds": [
+      "T2-52",
+      "T2-53",
+      "T2-54",
+      "T2-56"
+    ]
+  },
+  {
+    "id": "Q2-0004",
+    "task": "T2",
+    "type": "report",
+    "source": "原创示例",
+    "prompt": "In many cities, fewer young people are visiting museums and art galleries. What are the causes of this phenomenon, and what solutions can be suggested to encourage more young people to visit them?",
+    "pointIds": [
+      "T2-65",
+      "T2-66",
+      "T2-67",
+      "T2-68"
+    ]
+  },
+  {
+    "id": "Q2-0005",
+    "task": "T2",
+    "type": "discuss",
+    "source": "原创示例",
+    "prompt": "Some people argue that technological developments in artificial intelligence will make human translators obsolete. Others believe that human translation will always be necessary. Discuss both sides and give your own perspective.",
+    "pointIds": [
+      "T2-52",
+      "T2-54",
+      "T2-56",
+      "T2-76"
+    ]
+  }
+]
