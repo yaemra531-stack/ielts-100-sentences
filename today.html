@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f8f9fa">
+  <title>今日训练 · 雅思写作 6 分训练系统</title>
+  <script>
+    (() => {
+      // 仅只读读取 ielts100.theme.v1，保持夜间模式同步，绝不写入 ielts100.* 键
+      try {
+        const saved = localStorage.getItem('ielts100.theme.v1');
+        const theme = saved === 'dark' || saved === 'light' ? saved : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch {}
+    })();
+  </script>
+  <link rel="stylesheet" href="today.css">
+</head>
+<body>
+  <div class="page-container">
+    <!-- Header -->
+    <header class="site-header">
+      <a class="brand" href="today.html">
+        <span class="brand-badge">6</span>
+        <span>写作 6 分训练</span>
+      </a>
+      <nav class="site-nav">
+        <a class="nav-link active" href="today.html" aria-current="page">今日训练</a>
+        <a class="nav-link" href="#" id="nav-questions-btn">真题库</a>
+        <a class="nav-link" href="syllabus.html">学习要点</a>
+        <a class="nav-link" href="index.html">100句 · 词伙</a>
+        <a class="nav-link" href="methods.html">方法卡</a>
+      </nav>
+      <div class="header-right">
+        <span class="storage-status" id="storage-status-text">本机保存</span>
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="切换夜间模式" title="切换夜间模式">☾</button>
+        <button id="settings-open" class="icon-btn" type="button" aria-label="题库与备份设置" title="题库与备份设置">⚙</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- View 1: 首页选题与开始界面 -->
+      <section id="welcome-view" class="flow-view">
+        <div style="margin-bottom: 24px;">
+          <p id="today-date-text" style="font-size: 13px; color: var(--ink-tertiary); font-weight: 500; margin-bottom: 4px;">今日训练 · 45 分钟闭环</p>
+          <h1 id="today-headline" style="font-size: 26px; font-weight: 800; color: var(--ink);">今天解决一个问题：<span style="color: var(--accent);" id="headline-topic">比较类题目的立场</span></h1>
+        </div>
+
+        <div class="two-col" style="align-items: start;">
+          <!-- 左侧：今日核心题目 -->
+          <div class="card">
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+              <span class="badge" id="card-task-badge">Task 2</span>
+              <span class="badge badge-gray" id="card-type-badge">观点题 · opinion</span>
+              <span class="badge badge-gray" id="card-qid-badge">Q2-0001</span>
+              <span style="font-size: 12px; color: var(--ink-tertiary); margin-left: auto;" id="card-points-hint">关联要点加载中…</span>
+            </div>
+
+            <div class="prompt-box" id="card-prompt-text">
+              正在读取今日训练题目…
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <p style="font-size: 12px; font-weight: 600; color: var(--ink-secondary); margin-bottom: 8px;">今日训练模式：</p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="mode-selector-group">
+                <button type="button" class="btn btn-sm btn-primary mode-btn" data-mode="审题 + 主体段">审题 + 主体段 (45′)</button>
+                <button type="button" class="btn btn-sm btn-secondary mode-btn" data-mode="完整大作文">完整大作文 (40′)</button>
+                <button type="button" class="btn btn-sm btn-secondary mode-btn" data-mode="主体段专项练习">主体段专项 (30′)</button>
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--line); padding-top: 18px; margin-bottom: 22px;">
+              <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 10px;">五步训练流程：</p>
+              <div style="display: flex; gap: 6px; font-size: 12px; color: var(--ink-secondary); flex-wrap: wrap;">
+                <span>① 审题 (5′)</span> <span>→</span>
+                <span>② 独立作答 (10′)</span> <span>→</span>
+                <span>③ AI 批改 (15′)</span> <span>→</span>
+                <span>④ 独立重写 (15′)</span> <span>→</span>
+                <span>⑤ 保存记录</span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <button type="button" class="btn btn-primary" id="start-training-btn">开始今日训练 →</button>
+              <button type="button" class="btn btn-secondary" id="switch-question-btn">换一道题</button>
+            </div>
+          </div>
+
+          <!-- 右侧：待复习或历史记录 -->
+          <div class="card" style="background: var(--bg);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h2 style="font-size: 15px; font-weight: 700; color: var(--ink);">本题关联教材要点</h2>
+              <span class="badge badge-gray" id="side-point-count">0 项</span>
+            </div>
+            <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 12px;">作答前先明确要点，不盲目动笔。练习后根据 AI 反馈逐条突破。</p>
+            <div class="points-list" id="card-points-list">
+              <!-- 关联要点 chips 动态填充 -->
+            </div>
+
+            <div style="margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="font-size: 13px; font-weight: 700; color: var(--ink);">最近训练记录</h3>
+                <span style="font-size: 12px; color: var(--ink-tertiary);" id="recent-sessions-count">0 次完成</span>
+              </div>
+              <div id="recent-sessions-list" style="display: flex; flex-direction: column; gap: 8px;">
+                <p style="font-size: 12px; color: var(--ink-tertiary);">暂无历史训练记录。完成今日题目后将保存在本机。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 2: 五步训练流程 -->
+      <section id="training-view" class="flow-view" hidden>
+        <!-- 顶部流程导航条 -->
+        <div class="step-bar">
+          <div class="step-indicators">
+            <span class="badge" id="train-qid-badge">Q2-0001</span>
+            <span class="badge badge-gray" id="train-mode-badge">审题 + 主体段</span>
+
+            <span class="step-sep">|</span>
+
+            <div class="step-item active" data-step="1">
+              <span class="step-num">1</span>
+              <span>审题 (5′)</span>
+            </div>
+            <span class="step-sep">→</span>
+            <div class="step-item" data-step="2">
+              <span class="step-num">2</span>
+              <span>作答 (10′)</span>
+            </div>
+            <span class="step-sep">→</span>
+            <div class="step-item" data-step="3">
+              <span class="step-num">3</span>
+              <span>批改诊断 (15′)</span>
+            </div>
+            <span class="step-sep">→</span>
+            <div class="step-item" data-step="4">
+              <span class="step-num">4</span>
+              <span>独立重写 (15′)</span>
+            </div>
+            <span class="step-sep">→</span>
+            <div class="step-item" data-step="5">
+              <span class="step-num">5</span>
+              <span>保存</span>
+            </div>
+          </div>
+
+          <div class="step-timer-area">
+            <span class="timer-display" id="step-timer-text">05:00</span>
+            <button type="button" class="icon-btn" id="timer-toggle-btn" title="暂停/继续计时">⏸</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="skip-step-btn">跳过 / 下一步 →</button>
+          </div>
+        </div>
+
+        <!-- Step 1: 审题 -->
+        <div id="step-1-panel" class="card step-panel">
+          <div style="margin-bottom: 20px;">
+            <span class="badge" style="margin-bottom: 10px;">步骤 1 · 审题与立意 (建议 5 分钟)</span>
+            <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">题目要求</h2>
+            <div class="prompt-box" id="step1-prompt-display"></div>
+          </div>
+
+          <div class="two-col" style="margin-bottom: 24px;">
+            <div>
+              <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px;">候选教材要点 (只显示 ID、短标题与核对状态)</h3>
+              <div class="points-list" id="step1-points-display"></div>
+            </div>
+            <div>
+              <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px;">快速审题笔记 (选填)</h3>
+              <div class="form-group">
+                <input type="text" id="step1-target-input" class="form-control" placeholder="讨论对象 / 关键词（如：build more roads, reduce congestion）">
+              </div>
+              <div class="form-group">
+                <input type="text" id="step1-stance-input" class="form-control" placeholder="我的立场（如：部分反对，有效但不是 best way，须与其他办法比较）">
+              </div>
+              <div class="form-group">
+                <input type="text" id="step1-points-input" class="form-control" placeholder="主体段核心分论点">
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="button" class="btn btn-primary" id="step1-next-btn">完成审题，下一步：独立作答 (10′) →</button>
+          </div>
+        </div>
+
+        <!-- Step 2: 独立作答 -->
+        <div id="step-2-panel" class="card step-panel" hidden>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <span class="badge">步骤 2 · 独立作答 (建议 10 分钟)</span>
+              <h2 style="font-size: 18px; font-weight: 700; margin-top: 6px;">开始独立作答</h2>
+            </div>
+            <span style="font-size: 12px; color: var(--ink-tertiary);">专注表达，独立完成，不看参考资料</span>
+          </div>
+
+          <div class="prompt-box" id="step2-prompt-display" style="font-size: 14px; padding: 12px 16px; margin-bottom: 16px;"></div>
+
+          <div class="form-group">
+            <textarea id="draft-input" class="editor-textarea" placeholder="在此输入你的作答（主体段或全文）..."></textarea>
+            <div class="editor-meta">
+              <span>独立书写，直接敲键盘</span>
+              <span id="draft-word-count">0 词</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="btn btn-secondary" id="step2-back-btn">← 返回审题</button>
+            <button type="button" class="btn btn-primary" id="step2-next-btn">完成作答，下一步：AI 批改诊断 (15′) →</button>
+          </div>
+        </div>
+
+        <!-- Step 3: AI 批改诊断 -->
+        <div id="step-3-panel" class="step-panel" hidden>
+          <div class="two-col">
+            <!-- 左栏：题目与我的初稿 -->
+            <div class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h2 style="font-size: 16px; font-weight: 700;">我的初稿</h2>
+                <span class="badge badge-gray" id="step3-draft-words">0 词</span>
+              </div>
+              <div class="prompt-box" id="step3-prompt-display" style="font-size: 13px; padding: 10px 14px; margin-bottom: 14px;"></div>
+              <div id="step3-draft-display" style="background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px; font-size: 14px; line-height: 1.7; min-height: 180px; white-space: pre-wrap; margin-bottom: 18px;"></div>
+
+              <div style="border-top: 1px solid var(--line); padding-top: 16px;">
+                <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 10px;">批改动作（在 ChatGPT 完成）：</p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-secondary" id="copy-prompt-btn">复制批改提示词</button>
+                  <button type="button" class="btn btn-primary" id="open-paste-modal-btn">粘贴 ChatGPT 结果</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右栏：诊断结果（1-2个核心问题） -->
+            <div class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h2 style="font-size: 16px; font-weight: 700;">本次只改 1–2 个问题</h2>
+                <button type="button" class="btn btn-secondary btn-sm" id="manual-add-issue-btn">+ 手动添加/修改问题</button>
+              </div>
+
+              <!-- 诊断问题列表 -->
+              <div id="issues-list-container">
+                <p style="font-size: 13px; color: var(--ink-tertiary); padding: 20px 0; text-align: center;">尚未解析到 AI 批改结果。请先点击「复制批改提示词」发给 ChatGPT，再点击「粘贴 ChatGPT 结果」。</p>
+              </div>
+
+              <!-- 独立重写任务 -->
+              <div style="margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px;">
+                <label style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 6px;">重写任务：</label>
+                <input type="text" id="rewrite-task-input" class="form-control" placeholder="如：重写主体段 1，加入与公共交通的对比，说明为何修路不是 best way。">
+              </div>
+
+              <!-- AI 参考版本（默认隐藏，点击后标记为订正） -->
+              <div id="reference-version-wrapper" style="margin-top: 16px;">
+                <div class="ref-mask" id="ref-mask-box">
+                  <p class="ref-mask-text">🔒 AI 参考版本在重写完成前隐藏，避免照抄</p>
+                  <button type="button" class="btn btn-secondary btn-sm" id="reveal-ref-btn">仍要查看？(将标记为订正)</button>
+                </div>
+                <div class="ref-content" id="ref-content-box" hidden></div>
+              </div>
+
+              <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-primary" id="step3-next-btn">去独立重写 (15′) →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4: 独立重写 -->
+        <div id="step-4-panel" class="card step-panel" hidden>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <span class="badge">步骤 4 · 独立重写 (建议 15 分钟)</span>
+              <h2 style="font-size: 18px; font-weight: 700; margin-top: 6px;">学要点，独立重写</h2>
+            </div>
+            <div id="independent-badge-container">
+              <span class="badge badge-verified" id="independent-status-badge">独立重写模式</span>
+            </div>
+          </div>
+
+          <div style="background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 18px;">
+            <p style="font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px;">本次重写核心任务：</p>
+            <p id="step4-task-display" style="font-size: 14px; font-weight: 600; color: var(--ink);">根据诊断问题调整论证结构与词伙</p>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 12px; color: var(--ink-tertiary);">初稿与参考版本已隐藏。凭记忆与逻辑独立重写。</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="step4-toggle-ref-btn">查看初稿 / 参考 (将标为订正)</button>
+          </div>
+
+          <!-- 折叠的初稿与参考查看区 -->
+          <div id="step4-reference-peek" style="background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.6;" hidden>
+            <div style="margin-bottom: 10px;">
+              <strong>我的初稿：</strong>
+              <div id="step4-draft-peek-text" style="white-space: pre-wrap; margin-top: 4px; color: var(--ink-secondary);"></div>
+            </div>
+            <div>
+              <strong>AI 参考版本：</strong>
+              <div id="step4-ref-peek-text" style="white-space: pre-wrap; margin-top: 4px; color: var(--ink-secondary);"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <textarea id="rewrite-input" class="editor-textarea" placeholder="在此输入你的独立重写内容..."></textarea>
+            <div class="editor-meta">
+              <span>独立重写真实掌握，答对计入复习闭环</span>
+              <span id="rewrite-word-count">0 词</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="btn btn-secondary" id="step4-back-btn">← 返回批改诊断</button>
+            <button type="button" class="btn btn-primary" id="step4-next-btn">完成重写，下一步：保存记录 →</button>
+          </div>
+        </div>
+
+        <!-- Step 5: 保存记录 -->
+        <div id="step-5-panel" class="card step-panel" hidden style="max-width: 680px; margin: 0 auto; text-align: center;">
+          <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%; background: var(--green-soft); color: var(--green); font-size: 32px; font-weight: 700; margin-bottom: 16px;">✓</div>
+          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 8px;">训练闭环完成！</h2>
+          <p style="font-size: 14px; color: var(--ink-secondary); margin-bottom: 24px;">真题暴露问题 → 要点解决问题 → 重写验证掌握</p>
+
+          <div style="background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 20px; text-align: left; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-size: 13px; color: var(--ink-tertiary);">题目</span>
+              <span style="font-size: 13px; font-weight: 600;" id="summary-qid">Q2-0001</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-size: 13px; color: var(--ink-tertiary);">重写模式</span>
+              <span class="badge badge-verified" id="summary-independent-badge">独立重写 ✓</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-size: 13px; color: var(--ink-tertiary);">本次用时</span>
+              <span style="font-size: 13px; font-weight: 600;" id="summary-minutes">45 分钟</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-size: 13px; color: var(--ink-tertiary);">诊断问题</span>
+              <span style="font-size: 13px; font-weight: 600;" id="summary-issues-count">2 个问题</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: var(--ink-tertiary);">重写字数</span>
+              <span style="font-size: 13px; font-weight: 600;" id="summary-rewrite-words">0 词</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-primary" id="save-session-btn">保存训练记录到本机</button>
+            <button type="button" class="btn btn-secondary" id="export-session-md-btn">导出本次训练 Markdown</button>
+            <button type="button" class="btn btn-secondary" id="finish-and-home-btn">返回今日训练首页</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal: 真题选择 -->
+    <div id="question-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">选择训练题目</h2>
+          <button type="button" class="icon-btn modal-close-btn" data-modal="question-modal">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <select id="question-filter-task" class="form-control" style="flex: 1;">
+              <option value="all">全部任务</option>
+              <option value="T2">Task 2 大作文</option>
+              <option value="T1">Task 1 小作文</option>
+            </select>
+            <select id="question-filter-type" class="form-control" style="flex: 1;">
+              <option value="all">全部题型</option>
+              <option value="opinion">观点类 (opinion)</option>
+              <option value="discuss">双边讨论 (discuss)</option>
+              <option value="report">原因措施 (report)</option>
+            </select>
+          </div>
+          <div id="questions-list-container" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- 题目列表 -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: 粘贴 ChatGPT 结果 -->
+    <div id="paste-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">粘贴 ChatGPT 批改结果</h2>
+          <button type="button" class="icon-btn modal-close-btn" data-modal="paste-modal">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--ink-secondary); margin-bottom: 10px;">
+            将 ChatGPT 回复的完整文字粘贴在下方。系统会自动解析文末的 JSON 代码块提取问题与重写任务：
+          </p>
+          <textarea id="chatgpt-raw-input" class="editor-textarea" style="min-height: 220px;" placeholder="粘贴从 ChatGPT 复制的整段回答..."></textarea>
+          <p id="paste-parse-error" style="font-size: 12px; color: var(--red); margin-top: 8px;" hidden></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close-btn" data-modal="paste-modal">取消</button>
+          <button type="button" class="btn btn-primary" id="confirm-paste-parse-btn">解析并存入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: 手动添加/编辑问题 -->
+    <div id="issue-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">添加 / 编辑诊断问题</h2>
+          <button type="button" class="icon-btn modal-close-btn" data-modal="issue-modal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="issue-criterion-select">评分项 (Criterion)</label>
+            <select id="issue-criterion-select" class="form-control">
+              <option value="TR">TR - 任务回应 (Task Response)</option>
+              <option value="TA">TA - 任务完成 (Task Achievement)</option>
+              <option value="CC">CC - 连贯与衔接 (Coherence & Cohesion)</option>
+              <option value="LR">LR - 词汇丰富度 (Lexical Resource)</option>
+              <option value="GRA">GRA - 语法多样性与准确性 (Grammatical Range)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="issue-tag-input">问题标签 (Tag)</label>
+            <input type="text" id="issue-tag-input" class="form-control" placeholder="如：比较不完整、立场不清、词伙误用、句子结构">
+          </div>
+          <div class="form-group">
+            <label for="issue-points-select">关联教材要点</label>
+            <select id="issue-points-select" class="form-control">
+              <!-- 动态填入候选要点 -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="issue-chunk-input">关联词伙 (选填，若来自词伙题库)</label>
+            <input type="text" id="issue-chunk-input" class="form-control" placeholder="如：allow sb to do sth">
+          </div>
+          <div class="form-group">
+            <label for="issue-note-input">详细说明与修改建议</label>
+            <textarea id="issue-note-input" class="form-control" style="min-height: 80px;" placeholder="指出具体扣分点及如何调整..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close-btn" data-modal="issue-modal">取消</button>
+          <button type="button" class="btn btn-primary" id="save-issue-btn">保存问题</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: 设置面板 -->
+    <div id="settings-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">题库与数据设置</h2>
+          <button type="button" class="icon-btn modal-close-btn" data-modal="settings-modal">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- 导入数据包 -->
+          <div class="form-group" style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+            <label>导入私有数据包 (ielts6-pack.json)</label>
+            <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 8px;">
+              包含已核对要点正文、私人真题库与训练记录。只保存在本机 IndexedDB (ielts6.v1)，不上传服务器。
+            </p>
+            <input type="file" id="import-pack-file" accept=".json,application/json" class="form-control">
+            <p id="import-status-msg" style="font-size: 12px; margin-top: 6px;" hidden></p>
+          </div>
+
+          <!-- 导出数据包 -->
+          <div class="form-group" style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+            <label>导出完整数据包</label>
+            <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 8px;">
+              将全部要点、真题及训练记录打包备份为 JSON 文件。换设备时可直接导入。
+            </p>
+            <button type="button" class="btn btn-secondary btn-sm" id="export-full-pack-btn">导出 ielts6-pack.json</button>
+          </div>
+
+          <!-- 单次训练导出 Markdown -->
+          <div class="form-group" style="border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+            <label>单次训练导出为 Markdown</label>
+            <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 8px;">
+              选择一次历史训练，导出便于发给 AI 或长期归档的 Markdown 文档：
+            </p>
+            <div style="display: flex; gap: 8px;">
+              <select id="export-session-select" class="form-control" style="flex: 1;">
+                <option value="">暂无训练记录</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" id="export-selected-md-btn">导出 Markdown</button>
+            </div>
+          </div>
+
+          <!-- 重置新数据 -->
+          <div class="form-group">
+            <label style="color: var(--red);">重置新训练数据</label>
+            <p style="font-size: 12px; color: var(--ink-tertiary); margin-bottom: 8px;">
+              仅清空 IndexedDB ielts6.v1。旧系统 100句与词伙数据完全不受影响。
+            </p>
+            <button type="button" class="btn btn-danger btn-sm" id="reset-db-btn">清空 ielts6.v1 训练数据</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close-btn" data-modal="settings-modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="today.js"></script>
+</body>
+</html>

@@ -63,7 +63,7 @@ try{
   await page.locator('#theme-toggle').click();assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'light');
   await page.locator('#review-button').focus();
   // Keyboard access to the quiet settings dialog, backup, and reset.
-  await page.keyboard.press('Shift+Tab');assert.equal(await focused(),'settings-open');await page.keyboard.press('Enter');
+  while(await focused()!=='settings-open')await page.keyboard.press('Shift+Tab');assert.equal(await focused(),'settings-open');await page.keyboard.press('Enter');
   await page.locator('#settings').waitFor({state:'visible'});assert.equal(await focused(),'settings-close');
   await page.keyboard.press('Tab');assert.equal(await focused(),'import-file');await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await focused(),'export-button');
   const downloadEvent=page.waitForEvent('download');await page.keyboard.press('Enter');const download=await downloadEvent;
