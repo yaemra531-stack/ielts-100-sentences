@@ -189,3 +189,26 @@ test('练习：简单模式把词块合成配对、填空变点词；进阶模�
   assert.equal(hard.filter((c) => c.kind === 'type').length, 8);
   assert.ok(hard.some((c) => c.kind === 'order') && hard.some((c) => c.kind === 'match'));
 });
+
+test('练习：固定分组，题型均匀；下一组先做没做完的', () => {
+  const s = C.createState(D);
+  const pool = C.drillItems(s, D, DR, 'B2.2.9');
+  const groups = C.drillGroups(pool);
+  assert.equal(groups.length, Math.ceil(pool.length / 10));
+  assert.equal(groups.flat().length, pool.length);
+  const sizes = groups.map((g) => g.length);
+  assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1, '每组题数差不多');
+  for (const g of groups) assert.ok(new Set(g.map((x) => x.type)).size >= 3, '每组至少 3 种题型');
+  assert.deepEqual(C.drillGroups(pool).map((g) => g.map((x) => x.id).join()), groups.map((g) => g.map((x) => x.id).join()), '分组固定');
+  assert.equal(C.nextGroup(s, groups), 0);
+  groups[0].forEach((x, i) => C.recordDrill(s, x.id, i > 0));
+  assert.equal(C.groupStatus(s, groups[0]).state, 'done');
+  assert.equal(C.nextGroup(s, groups), 1);
+  C.recordDrill(s, groups[2][0].id, true);
+  assert.equal(C.groupStatus(s, groups[2]).state, 'doing');
+  groups.slice(1).flat().forEach((x) => C.recordDrill(s, x.id, true));
+  assert.equal(C.nextGroup(s, groups), 0, '都做过后回到有错的组');
+  C.recordDrill(s, groups[0][0].id, true);
+  assert.equal(C.groupStatus(s, groups[0]).state, 'perfect');
+  assert.equal(C.nextGroup(s, groups), null);
+});

@@ -453,9 +453,10 @@
 
   function drillLink(it, e) {
     const n = (it && DR.packs[it.qid] ? DR.packs[it.qid].items.length : 0);
+    const g = n ? packGroups(it.qid).length : 0;
     const m = C.parseChunks(e.chunks).length;
     if (!n && !m) return '';
-    return `<p style="margin:16px 0 0"><a class="primary-button" id="to-drill" href="#drill/${n ? esc(it.qid) : 'mine'}">做今天的练习（${n || m} 题）→</a></p>`;
+    return `<p style="margin:16px 0 0"><a class="primary-button" id="to-drill" href="#drill/${n ? esc(it.qid) : 'mine'}">做今天的练习（${n ? `${g} 组 · ${n} 题` : m + ' 题'}）→</a></p>`;
   }
 
   function unitEnd(it) {
@@ -572,24 +573,39 @@
 
   function renderDrill(arg) {
     const valid = (id) => DR.packs[id] || ['mine', 'wrong', 'all'].includes(id);
-    if (arg && valid(arg) && (!ui.drill || ui.drill.source !== arg || ui.drill.over)) return startRound(arg);
+    if (arg && valid(arg) && (!ui.drill || ui.drill.source !== arg || ui.drill.over)) return startRound(arg, null, DR.packs[arg] ? C.nextGroup(state, packGroups(arg)) : null);
     if (ui.drill && !ui.drill.over) return drawCard();
     drillHome(ui.drillSrc || Object.keys(DR.packs)[0] || 'mine');
+  }
+
+  const packGroups = (id) => C.drillGroups(C.drillItems(state, D, DR, id));
+
+  function levelGrid(id) {
+    const groups = packGroups(id);
+    return `<div class="levels" id="levels">${groups.map((g, i) => {
+      const t = C.groupStatus(state, g);
+      const sub = t.state === 'new' ? '未开始' : t.state === 'doing' ? `做到 ${t.seen} / ${t.n}` : t.state === 'perfect' ? '✓ 全对' : `✓ 错 ${t.wrong} 题`;
+      return `<button class="lvl ${t.state}" data-g="${i}"><b>第 ${i + 1} 组</b><span>${t.n} 题 · ${sub}</span></button>`;
+    }).join('')}</div>`;
   }
 
   function drillHome(sel) {
     ui.drill = null; ui.drillSrc = sel;
     const srcs = drillSources();
     const cur = srcs.find((x) => x.id === sel) || srcs[0];
-    const st = C.drillStats(state, srcs.find((x) => x.id === 'all').items);
+    const isPack = !!DR.packs[cur.id];
+    const groups = isPack ? packGroups(cur.id) : [];
+    const gst = groups.map((g) => C.groupStatus(state, g));
+    const nextG = isPack ? C.nextGroup(state, groups) : null;
+    const st = C.drillStats(state, cur.items);
     const mine = srcs.find((x) => x.id === 'mine').items;
     const kinds = Object.keys(KIND).map((k) => [k, cur.items.filter((x) => x.type === k).length]).filter(([, n]) => n);
     view.innerHTML = `
       <section class="intro">
         <div><p class="eyebrow">Drill</p><h1>练习</h1><p class="intro-note">做完一天的题，用配对、选择、排序把读题、ABC、句型和词块练熟。每轮约 5 分钟。</p></div>
         <div class="stats">
-          <div><span class="stat-num">${st.total}</span><span class="stat-label">题库</span></div>
-          <div><span class="stat-num">${st.mastered}</span><span class="stat-label">已掌握（连对 2 次）</span></div>
+          ${isPack ? `<div><span class="stat-num">${gst.filter((x) => x.state === 'done' || x.state === 'perfect').length}<small> / ${groups.length} 组</small></span><span class="stat-label">已做完（每组约 ${Math.round(st.total / groups.length)} 题）</span></div>` : `<div><span class="stat-num">${st.total}</span><span class="stat-label">题</span></div>`}
+          <div><span class="stat-num">${st.mastered}<small> / ${st.total}</small></span><span class="stat-label">已掌握（连对 2 次）</span></div>
           <div><span class="stat-num">${st.wrong}</span><span class="stat-label">错题</span></div>
         </div>
       </section>
@@ -598,25 +614,29 @@
         <div class="chips" id="srcs">${srcs.map((x) => `<button class="chip" data-v="${esc(x.id)}" aria-pressed="${x.id === cur.id}">${esc(x.label)}<small>${x.items.length}</small></button>`).join('')}</div>
         <p class="hint">${kinds.length ? kinds.map(([k, n]) => `${KIND[k]} ${n}`).join(' · ') : cur.id === 'mine' ? '还没有自己的词块：在模仿日「对照」一步，按「中文 = English」一行一个记下来。' : cur.id === 'wrong' ? '没有错题 👍' : '这里还没有题。'}</p>
         ${DR.packs[cur.id]?.note ? `<p class="hint" lang="en">${esc(DR.packs[cur.id].note)}</p>` : ''}
+        ${isPack ? `<span class="label">${groups.length} 组 · 共 ${st.total} 题<span>点任意一组直接做；每组都混着选择、排序、配对、填空</span></span>${levelGrid(cur.id)}` : ''}
         <span class="label">难度</span>
         <div class="seg" id="mode">${MODE.map(([v, l]) => `<button data-v="${v}" aria-pressed="${drillMode() === v}">${l}</button>`).join('')}</div>
         <p class="hint">${drillMode() === 'hard' ? '词块看中文写英文，句型自己填空。拼写对了才算对。' : '词块变成中英配对和四选一，句型从词库里点词填空。先认得，再练拼写。'}</p>
-        <div class="actions"><span class="hint" style="margin:0">做错的题本轮最后再出一次。</span><button class="primary-button" id="go" ${cur.items.length ? '' : 'disabled'}>开始一轮 →</button></div>
+        <div class="actions"><span class="hint" style="margin:0">做错的题本轮最后再出一次。</span><button class="primary-button" id="go" ${cur.items.length ? '' : 'disabled'}>${isPack ? (nextG == null ? '全部清完 · 随机复习一轮 →' : `${gst[nextG].state === 'done' ? '重做有错的' : gst[nextG].state === 'doing' ? '接着做' : '开始'}第 ${nextG + 1} 组 →`) : `开始一轮（${Math.min(10, cur.items.length)} 题）→`}</button></div>
         ${mine.length ? `<details class="peek"><summary>我的词块（${mine.length}）</summary><ul class="hint">${mine.map((x) => `<li>${esc(x.zh)} = <span lang="en">${esc(x.en)}</span>${x.from ? ` <span class="muted">· ${esc(x.from)}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
       </section>`;
     view.querySelectorAll('#srcs .chip').forEach((b) => b.onclick = () => drillHome(b.dataset.v));
     view.querySelectorAll('#mode button').forEach((b) => b.onclick = () => { state.settings.drillMode = b.dataset.v; save(); drillHome(cur.id); });
-    $('go').onclick = () => startRound(cur.id);
+    $('go').onclick = () => startRound(cur.id, null, nextG);
+    view.querySelectorAll('#levels .lvl').forEach((b) => b.onclick = () => startRound(cur.id, null, Number(b.dataset.g)));
   }
 
-  function startRound(source, onlyIds) {
+  function startRound(source, onlyIds, group) {
     let items = C.drillItems(state, D, DR, source);
     if (onlyIds) items = items.filter((x) => onlyIds.includes(x.id));
-    const round = onlyIds ? C.shuffle(items) : C.buildRound(items, state, 10);
+    const groups = DR.packs[source] ? packGroups(source) : [];
+    const useGroup = !onlyIds && group != null && groups[group];
+    const round = useGroup ? C.shuffle(groups[group]) : onlyIds ? C.shuffle(items) : C.buildRound(items, state, 10);
     if (!round.length) return drillHome(source);
     const pool = C.drillItems(state, D, DR, 'all');
     ui.drillSrc = source;
-    ui.drill = { source, pool, mode: drillMode(), cards: C.makeCards(round, pool, drillMode()), i: 0, shown: false, first: {}, retried: {}, prev: {}, over: false };
+    ui.drill = { source, pool, mode: drillMode(), cards: C.makeCards(round, pool, drillMode()), n: round.length, group: useGroup ? group : null, groupsN: groups.length, i: 0, shown: false, first: {}, retried: {}, prev: {}, over: false };
     if (location.hash !== '#drill/' + source) history.replaceState(null, '', '#drill/' + source);
     drawCard();
   }
@@ -650,7 +670,7 @@
     }
     const needsBtn = ['bank', 'type'].includes(card.kind);
     view.innerHTML = `
-      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>第 ${R.i + 1} / ${R.cards.length} 题</h1></div></section>
+      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}${R.group != null ? ` · 共 ${R.groupsN} 组` : ''}</p><h1 id="dh">${R.group != null ? `第 ${R.group + 1} 组 · ` : ''}${card.retry ? '再练做错的' : `已做 ${Object.keys(R.first).length} / ${R.n} 题`}</h1></div></section>
       <div class="track" aria-hidden="true">${R.cards.map((y, k) => `<i class="${k < R.i ? 'done' : k === R.i ? 'now' : ''}"></i>`).join('')}</div>
       <section class="card drill" data-kind="${card.kind}">
         <div class="meta"><span><span class="tag">${kind}</span>${card.items.length === 1 && x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ''}${card.retry ? ' <span class="tag amber">再来一次</span>' : ''}</span><button class="text-button" id="quit">结束这轮</button></div>
@@ -670,6 +690,7 @@
         if (!ok && !R.retried[id]) { R.retried[id] = true; R.cards.push({ ...C.cardFor(item, R.pool, R.mode), retry: true }); }
       });
       save();
+      if (!card.retry) $('dh').textContent = `${R.group != null ? `第 ${R.group + 1} 组 · ` : ''}已做 ${Object.keys(R.first).length} / ${R.n} 题`;
       const bad = Object.values(res).filter((v) => !v).length;
       const head = !bad ? '对了' : card.items.length > 1 ? `错了 ${bad} 个，本轮最后再练一次` : '再看一眼正确答案';
       $('verdict').innerHTML = `<div class="verdict ${bad ? 'miss' : ''}" style="margin-top:18px"><span class="ic">${bad ? '×' : '✓'}</span><div>${head}${extra ? '<br>' + extra : ''}</div></div>`;
@@ -780,21 +801,22 @@
   function drillEnd(quit) {
     const R = ui.drill;
     R.over = true;
+    const nextAfter = DR.packs[R.source] ? C.nextGroup(state, packGroups(R.source)) : null;
     const all = R.cards.flatMap((c) => c.items);
     const ids = Object.keys(R.first);
     const wrong = all.filter((x, k) => all.findIndex((y) => y.id === x.id) === k && R.first[x.id] === false);
     const okN = ids.length - wrong.length;
     view.innerHTML = `
-      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>${quit ? '这轮先到这里' : '这一轮做完了'}</h1></div></section>
+      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>${R.group != null ? `第 ${R.group + 1} 组` : '这一轮'}${quit ? '先到这里' : '做完了'}</h1>${R.group != null ? `<p class="intro-note">${(() => { const gs = packGroups(R.source).map((g) => C.groupStatus(state, g)); const left = gs.filter((x) => x.state === 'new' || x.state === 'doing').length; return left ? `${R.groupsN} 组里还有 ${left} 组没做完。` : `${R.groupsN} 组全部做过了。`; })()}</p>` : ''}</div></section>
       <section class="card done-card">
         <div class="done-mark"${wrong.length ? ' style="font-size:16px"' : ''}>${wrong.length ? okN + '/' + ids.length : '✓'}</div>
         <h2>${ids.length ? `${okN} / ${ids.length} 一次答对` : '还没做题'}</h2>
         ${wrong.length ? `<p>这些已经进了「错题」，下次优先出：</p><ol class="steals" style="text-align:left">${wrong.map((x) => `<li><span>${esc(promptText(x))}</span><span class="muted" lang="en">${esc(answerText(x))}</span></li>`).join('')}</ol>` : ids.length ? '<p>全对。连对两次的题算掌握，之后会少出。</p>' : ''}
-        <div class="actions" style="justify-content:center">${wrong.length ? `<button class="secondary-button" id="redo">只练这 ${wrong.length} 题</button>` : ''}<button class="secondary-button" id="home">换一组 / 换难度</button><button class="primary-button" id="again">再来一轮 →</button></div>
+        <div class="actions" style="justify-content:center">${wrong.length ? `<button class="secondary-button" id="redo">只练这 ${wrong.length} 题</button>` : ''}<button class="secondary-button" id="home">${R.group != null ? '看全部组' : '换一组 / 换难度'}</button><button class="primary-button" id="again">${nextAfter != null ? `下一组（第 ${nextAfter + 1} 组）→` : '再来一轮 →'}</button></div>
       </section>`;
     if ($('redo')) $('redo').onclick = () => startRound(R.source === 'wrong' ? 'all' : R.source, wrong.map((x) => x.id));
     $('home').onclick = () => { history.replaceState(null, '', '#drill'); drillHome(R.source); };
-    $('again').onclick = () => startRound(R.source);
+    $('again').onclick = () => startRound(R.source, null, nextAfter);
   }
 
   /* ---------- 速查 ---------- */

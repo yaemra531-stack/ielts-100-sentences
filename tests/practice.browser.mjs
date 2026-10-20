@@ -91,12 +91,18 @@ for (; n < 30 && !(await p.isVisible('.done-card')); n++) {
   await p.waitForTimeout(30);
 }
 if (!sawRetry) fail('做错的题应在本轮末再出一次');
-if (!(await text()).includes('9 / 10 一次答对')) fail('结果页应统计一次答对');
+if (!(await text()).includes('8 / 9 一次答对')) fail('结果页应统计一次答对');
+if (!(await text()).includes('第 1 组做完了') || !(await text()).includes('8 组里还有 7 组没做完')) fail('结果页应显示组进度');
+if (!(await p.textContent('#again')).includes('第 2 组')) fail('应引导做下一组');
 if ([...kinds].some((k) => k === 'type')) fail('简单模式不该要求拼写');
 await shot('21-drill-end');
 s = await st();
-if (Object.keys(s.drill).length !== 10 || Object.values(s.drill).filter((r) => r.bad && !r.streak).length !== 1) fail('练习记录不对');
+if (Object.keys(s.drill).length !== 9 || Object.values(s.drill).filter((r) => r.bad && !r.streak).length !== 1) fail('练习记录不对');
 await p.click('#home');
+if ((await p.locator('#levels .lvl').count()) !== 8) fail('应显示 8 组');
+if (!(await p.textContent('#levels .lvl >> nth=0')).includes('错 1 题')) fail('第 1 组状态不对');
+if (!(await p.textContent('#go')).includes('开始第 2 组')) fail('开始按钮应指向第 2 组');
+await shot('19-drill-levels');
 if ((await p.textContent('#srcs .chip[data-v="wrong"]')).trim() !== '错题1') fail('错题应为 1');
 if ((await p.textContent('#srcs .chip[data-v="mine"]')).trim() !== '我的词块2') fail('我的词块应为 2');
 await p.click('#srcs .chip[data-v="mine"]');

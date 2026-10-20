@@ -365,6 +365,35 @@
     return r;
   }
 
+
+  /* 固定分组（关卡）：按题型轮流分配，每组约 10 题、各种题型都有。题库顺序不变，分组就不变。 */
+  function drillGroups(items, size = 10) {
+    if (!items.length) return [];
+    const g = Math.ceil(items.length / size);
+    const byType = {};
+    items.forEach((x) => (byType[x.type] = byType[x.type] || []).push(x));
+    const out = Array.from({ length: g }, () => []);
+    let k = 0;
+    Object.values(byType).forEach((l) => l.forEach((x) => out[k++ % g].push(x)));
+    return out;
+  }
+
+  function groupStatus(s, group) {
+    const d = s.drill || {};
+    let seen = 0, right = 0, wrong = 0;
+    group.forEach((x) => { const r = d[x.id]; if (!r) return; seen += 1; if (r.streak) right += 1; else wrong += 1; });
+    const n = group.length;
+    return { n, seen, right, wrong, state: !seen ? 'new' : seen < n ? 'doing' : wrong ? 'done' : 'perfect' };
+  }
+
+  /* 下一组：先做没做完的，再做有错题的，全清了返回 null（改成随机复习） */
+  function nextGroup(s, groups) {
+    const st = groups.map((g) => groupStatus(s, g));
+    let i = st.findIndex((x) => x.state === 'doing' || x.state === 'new');
+    if (i < 0) i = st.findIndex((x) => x.state === 'done');
+    return i < 0 ? null : i;
+  }
+
   function drillStats(s, items) {
     const d = s.drill || {};
     let seen = 0, mastered = 0, wrong = 0;
@@ -380,5 +409,5 @@
     return s;
   }
 
-  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf, norm, alts, parseChunks, clozeParts, drillItems, buildRound, checkAnswer, recordDrill, drillStats, shuffle, cardFor, makeCards };
+  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf, norm, alts, parseChunks, clozeParts, drillItems, buildRound, checkAnswer, recordDrill, drillStats, shuffle, cardFor, makeCards, drillGroups, groupStatus, nextGroup };
 })(typeof window !== 'undefined' ? window : globalThis);
