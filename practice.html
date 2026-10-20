@@ -13,17 +13,17 @@
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     })();
   </script>
-  <meta name="description" content="每天一道雅思写作题：先写，再翻书对答案，用记录找出弱项。">
+  <meta name="description" content="每天一道雅思写作题：见题、学思路、仿写、对照，按题型单元推进。">
   <title>每日一题 · 雅思写作 6–6.5</title>
-  <link rel="stylesheet" href="practice.css?v=1">
-  <script src="six-data.js?v=1" defer></script>
-  <script src="six-core.js?v=1" defer></script>
-  <script src="six-app.js?v=1" defer></script>
+  <link rel="stylesheet" href="practice.css?v=2">
+  <script src="six-data.js?v=2" defer></script>
+  <script src="six-core.js?v=2" defer></script>
+  <script src="six-app.js?v=2" defer></script>
 </head>
 <body>
   <div class="page">
     <header class="header">
-      <a class="brand" href="#today" aria-label="每日一题首页"><span class="brand-mark">题</span><span>每日一题<span class="brand-light"> / 以题推进</span></span></a>
+      <a class="brand" href="#today" aria-label="每日一题首页"><span class="brand-mark">题</span><span>每日一题<span class="brand-light"> / 模仿 + 真题</span></span></a>
       <nav class="tabs" aria-label="页面">
         <a href="#today" data-tab="today">今日</a>
         <a href="#log" data-tab="log">记录</a>
@@ -45,11 +45,6 @@
     <div class="settings-section">
       <h3>PDF 页码偏移</h3>
       <label class="inline-field">书页 + <input id="pdf-offset" type="number" min="-50" max="80" step="1"> = PDF 页</label>
-    </div>
-    <div class="settings-section">
-      <h3>题目原文</h3>
-      <p>英文题目不放在公开网站上。导入你本机的「题目原文包」（JSON）后，题目会直接显示在页面里，AI 提示词也会自动带上题目。</p>
-      <div class="settings-actions"><label class="secondary-button file-label">导入题目原文包<input id="import-prompts" type="file" accept="application/json,.json"></label></div>
     </div>
     <div class="settings-section">
       <h3>备份</h3>

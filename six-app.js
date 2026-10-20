@@ -5,7 +5,8 @@
   const $ = (id) => document.getElementById(id);
   const view = $('view');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const PHASE = { explore: '混乱期', focus: '针对期', mock: '全真期', free: '自由练', review: '复盘' };
+  const PHASE = { learn: '模仿期', focus: '真题期', mock: '全真期', free: '自由练', review: '阶段总结' };
+  const UNIT = (u) => (u === 'stage' ? '阶段全真' : D.types[u] ? D.types[u].label + '单元' : '');
   const RATE = [[1, '差很多', 'lo'], [2, '接近', 'mid'], [3, '差不多', 'hi']];
 
   let state = load();
@@ -47,31 +48,39 @@
 
   /* ---------- 今日 ---------- */
   function intro(phase, item) {
-    const prog = C.phaseProgress(state, phase === 'review' ? 'explore' : phase);
+    const base = phase === 'review' ? 'learn' : phase;
+    const prog = C.phaseProgress(state, base);
     const st = C.stats(state, D);
     const idx = item ? state.queue.filter((q) => q.phase === phase).indexOf(item) + 1 : prog.total;
     const notes = {
-      explore: '所有题型都打一遍，用记录找出自己的强项和弱项。',
-      focus: `六成时间练你的弱项：${(state.review?.weakTypes || []).map(typeLabel).join('、')}。`,
+      learn: item ? unitNote(item) : '',
+      focus: `不看书、计时写，六成时间练你的弱项：${(state.review?.weakTypes || []).map(typeLabel).join('、')}。`,
       mock: '60 分钟全真：Task 1 20 分钟 + Task 2 40 分钟。',
       free: '题单做完了，继续每天一题。',
-      review: '两周混乱期结束。花 15 分钟看清楚自己，再决定接下来练什么。'
+      review: '模仿期结束。花 15 分钟回顾句型卡、看清强项和弱项，再进入真题期。'
     };
-    const segs = state.queue.filter((q) => q.phase === (phase === 'review' ? 'explore' : phase))
-      .map((q) => `<i class="${state.entries[q.id]?.status === 'done' ? 'done' : q === item ? 'now' : ''}"></i>`).join('');
+    const list = state.queue.filter((q) => q.phase === base);
+    const segs = list.map((q, i) => `<i class="${state.entries[q.id]?.status === 'done' ? 'done' : q === item ? 'now' : ''}${i && q.unit && q.unit !== list[i - 1].unit ? ' gap' : ''}" title="${esc(UNIT(q.unit))}"></i>`).join('');
     const est = item ? C.estimateFinish(state, phase) : null;
     return `
       <section class="intro">
         <div><p class="eyebrow">One question a day</p>
-          <h1>${PHASE[phase]}${item ? ` · 第 ${idx} / ${prog.total} 题` : ''}</h1>
+          <h1>${PHASE[phase]}${item ? ` · 第 ${idx} / ${prog.total} ${phase === 'learn' ? '天' : '题'}` : ''}</h1>
           <p class="intro-note">${notes[phase]}</p></div>
         <div class="stats">
           <div><span class="stat-num">${st.done}</span><span class="stat-label">已完成</span></div>
-          <div><span class="stat-num">${est ? fmtDate(est) : '—'}</span><span class="stat-label">按每周 6 题，本阶段完成</span></div>
-          <div><span class="stat-num">${st.judgeRate == null ? '—' : Math.round(st.judgeRate * 100) + '<small>%</small>'}</span><span class="stat-label">题型判断正确率</span></div>
+          <div><span class="stat-num">${est ? fmtDate(est) : '—'}</span><span class="stat-label">按每周 6 ${base === 'learn' ? '天' : '题'}，本阶段完成</span></div>
+          <div><span class="stat-num">${st.steals}</span><span class="stat-label">攒下的句型</span></div>
         </div>
       </section>
       <div class="track" aria-hidden="true">${segs}</div>`;
+  }
+
+  function unitNote(item) {
+    const list = state.queue.filter((q) => q.phase === 'learn' && q.unit === item.unit);
+    const day = list.indexOf(item) + 1;
+    const what = item.kind === 'mock' ? '大小作文连写 60 分钟，检验这一阶段' : item.kind === 'question' ? '真题日：40 分钟计时，不看书，写完交给 AI 批改' : item.then ? '模仿一张图，再用第二张图写开头和概述' : item.less ? '再模仿一篇，这次尽量少看范文' : '跟着书上的思路和范文，模仿着写';
+    return `<b>${UNIT(item.unit)}</b>${list.length > 1 ? ` · 第 ${day} / ${list.length} 天` : ''} · ${what}`;
   }
 
   function renderToday() {
@@ -84,7 +93,8 @@
     if (item.kind === 'rewrite' && !item.of && r.source) { item.of = r.source.id; save(); }
     const e = C.entryFor(state, item);
     const sunday = new Date().getDay() === 0 && e.step === 1 && !e.draft;
-    const steps = ['见题', '写', '对答案', '记录'];
+    const imit = item.kind === 'imitate';
+    const steps = imit ? ['见题', '学思路', '仿写', '对照'] : ['见题', '写', '对答案', '记录'];
     view.innerHTML = intro(phase, item) +
       (sunday ? '<p class="notice">今天周日，按计划休息。想练也可以，不会打乱进度。</p>' : '') +
       `<section class="card" aria-label="今日一题">
@@ -93,7 +103,7 @@
       </section>`;
     const host = $('step');
     if (r.kind === 'rewrite' && !r.source) return stepNoRewrite(host, item);
-    [stepSee, stepWrite, stepCheck, stepLog][e.step - 1](host, r, e);
+    (imit ? [stepSee, stepPlan, stepImitate, stepCompare] : [stepSee, stepWrite, stepCheck, stepLog])[e.step - 1](host, r, e);
   }
 
   function goStep(e, n) { e.step = n; save(); renderToday(); }
@@ -102,7 +112,7 @@
     if (!q) return '';
     const text = q.prompt
       ? `<p class="prompt" lang="en">${esc(q.prompt)}</p>`
-      : `<p class="prompt muted" style="font-family:inherit;font-size:16px">${esc(q.title)} · 打开书 ${pg(q.q)}，只看题目这一段。</p><p class="hint">想直接在这里显示英文题目：设置 → 导入题目原文包。</p>`;
+      : `<p class="prompt muted" style="font-family:inherit;font-size:16px">${esc(q.title)} · 打开书 ${pg(q.q)}，只看题目这一段。</p>`;
     return text +
       (q.task === 'T1' ? `<div class="book-ref">📖 <div>图在书上 ${pg(q.q)}。只看图和题目。</div></div>` : '');
   }
@@ -116,9 +126,20 @@
   function stepSee(host, r, e) {
     const item = r.item;
     let head = '', body = '';
+    if (r.kind === 'imitate') {
+      const q = r.question;
+      head = `<div class="meta"><span><span class="tag">${q.task}</span> ${esc(q.section)} · ${esc(q.title)}</span><span>题目在书 ${pg(q.q)}</span></div>`;
+      body = promptBlock(q) +
+        `<span class="label">先猜一下：这是什么题型？<span>猜错没关系，下一步看书上的解析</span></span>
+        <div class="chips" id="judge">${Object.entries(D.types).filter(([, t]) => t.task === q.task).map(([k, t]) => `<button class="chip" data-v="${k}" aria-pressed="${e.judgedType === k}">${t.label}</button>`).join('')}</div>`;
+      host.innerHTML = head + body + `<div class="actions"><span class="hint">这一步 1–2 分钟就够。</span><button class="primary-button" id="go">下一步：学思路 →</button></div>`;
+      host.querySelectorAll('#judge .chip').forEach((b) => b.onclick = () => { e.judgedType = b.dataset.v; save(); host.querySelectorAll('#judge .chip').forEach((x) => x.setAttribute('aria-pressed', x === b)); });
+      $('go').onclick = () => goStep(e, 2);
+      return;
+    }
     if (r.kind === 'question') {
       const q = r.question;
-      head = `<div class="meta"><span><span class="tag">${q.task}</span> ${esc(q.section)}${item.full ? ' · <span class="tag amber">整篇 40′</span>' : ''}</span><span>题目在书 ${pg(q.q)}</span></div>`;
+      head = `<div class="meta"><span><span class="tag">${q.task}</span> ${esc(q.section)}${item.real ? ' · <span class="tag amber">真题 · 不看书</span>' : ''}${item.full ? ` · <span class="tag amber">整篇 ${q.task === 'T1' ? 20 : 40}′</span>` : ''}</span><span>题目在书 ${pg(q.q)}</span></div>`;
       body = promptBlock(q) +
         `<div class="book-ref">⚠️ <div>解析、翻译和范文就在题目后面几页。<b>写完之前别往后翻。</b></div></div>
         <span class="label">你判断这是什么题型？<span>先自己判断，对答案时揭晓</span></span>
@@ -150,6 +171,115 @@
       e.timer = { total: mins * 60, used: e.timer?.used || 0, running: true };
       goStep(e, 2);
     };
+  }
+
+  /* 模仿 ② 学思路 */
+  const PLAN = {
+    T2: [['stance', '立场 / 回答', '例：部分同意。题目确定 A＝不交税，要往后想它带来的结果。'], ['s1', '主体段 1 的中心句', '可以照抄或改写书上的「可以选择的观点」'], ['s2', '主体段 2 的中心句', '']],
+    T1: [['overview', '概述要写的 2 个主要特征', '例：总量上升；公路一直最多。'], ['groups', '主体段怎么分组', '例：上升的一组 / 下降的一组'], ['tense', '时态', '例：过去时；有预测部分用 is expected to']]
+  };
+  function planBox(q, e) {
+    const rows = PLAN[q.task].filter(([k]) => e.plan && e.plan[k]);
+    return rows.length ? `<div class="pane plan">${rows.map(([k, l]) => `<div><span class="muted">${l}：</span>${esc(e.plan[k])}</div>`).join('')}</div>` : '';
+  }
+  function pointsBlock(q) {
+    const pts = q.points.map((n) => pointOf(q, n)).filter(Boolean);
+    return pts.length ? `<ul class="points">${pts.map((p) => `<li><b>${p.task === 'T1' ? 'T1 ' : ''}要点 ${p.no}</b> ${esc(p.hint)} <span class="pg">${pg(p.page)}</span></li>`).join('')}</ul>` : '';
+  }
+  function stepPlan(host, r, e) {
+    const q = r.question;
+    e.plan = e.plan || {};
+    const ok = e.judgedType === q.type;
+    const verdict = e.judgedType ? `<div class="verdict ${ok ? '' : 'miss'}"><span class="ic">${ok ? '✓' : '!'}</span><div>你猜：<b>${typeLabel(e.judgedType)}</b> · 书上：<b>${typeLabel(q.type)}</b>${ok ? '。猜对了。' : '。读解析时留意：是哪个字眼决定了题型。'}</div></div>` : `<div class="verdict"><span class="ic">i</span><div>这是 <b>${typeLabel(q.type)}</b>。</div></div>`;
+    const reads = q.task === 'T2'
+      ? [['「题目解析」：题型、题目确定的 A / C、要回答什么', q.q], ['「可以选择的观点」和「学生的观点点评」：哪些观点能用，哪些会跑题', q.q]]
+      : [['「思路提示」：时态、描述对象、怎么分段、概述写什么', q.q], ['范文的第一句和概述段：看它怎么改写题目、挑哪 2 个特征', q.a]];
+    host.innerHTML = verdict + `
+      <h3 class="sub">翻书读思路 <span class="muted" style="font-weight:400">约 10 分钟 · 这次可以看，看懂了再写</span></h3>
+      <ol class="keylist">${reads.map(([w, p]) => `<li><span>${w}</span><span class="pg">${pg(p)}</span></li>`).join('')}</ol>
+      <h3 class="sub">今天的知识点</h3>${pointsBlock(q)}
+      <h3 class="sub">把思路写成骨架 <span class="muted" style="font-weight:400">照抄书上的也行，仿写时会显示在作文框上面</span></h3>
+      ${PLAN[q.task].map(([k, l, ph]) => `<label class="label" for="plan-${k}">${l}</label><input type="text" id="plan-${k}" value="${esc(e.plan[k] || '')}" placeholder="${esc(ph)}">`).join('')}
+      <div class="actions"><button class="secondary-button" id="back">← 回去看题</button><button class="primary-button" id="go">开始仿写 · ${C.minutesFor(r)} 分钟 →</button></div>`;
+    PLAN[q.task].forEach(([k]) => { $('plan-' + k).oninput = (ev) => { e.plan[k] = ev.target.value; saveSoon(); }; });
+    $('back').onclick = () => goStep(e, 1);
+    $('go').onclick = () => { save(); e.timer = { total: C.minutesFor(r) * 60, used: e.timer?.used || 0, running: true }; goStep(e, 3); };
+  }
+
+  /* 模仿 ③ 仿写 */
+  function stepImitate(host, r, e) {
+    const q = r.question, t2 = r.then;
+    e.timer = e.timer || { total: C.minutesFor(r) * 60, used: 0, running: true };
+    const how = r.item.less
+      ? `今天<b>尽量少看范文</b>：按你的骨架先写，卡住超过 2 分钟，再看一眼书上 ${pg(q.a)} 范文对应的那一段。`
+      : `把书翻到 ${pg(q.a)} 的<b>${esc(q.aLabel)}</b>放在旁边，一段一段跟着写：<b>${q.task === 'T1' ? '结构和顺序照搬，句子换成你自己的说法' : '结构照搬，观点和句子换成你自己的'}</b>。`;
+    host.innerHTML = `
+      <div class="book-ref">📖 <div>${how}</div></div>
+      <details class="peek"><summary>再看一眼题目</summary><p class="prompt" lang="en" style="font-size:16px">${esc(q.prompt)}</p></details>
+      ${planBox(q, e)}
+      <div class="writebar">
+        <div class="timer"><span class="clock" id="clock">0:00</span><button class="secondary-button" id="pause"></button></div>
+        <span class="wc" id="wc"></span>
+      </div>
+      <textarea id="draft" class="essay" lang="en" spellcheck="false" placeholder="照着范文的结构写你自己的版本。">${esc(e.draft || '')}</textarea>
+      ${t2 ? `<h3 class="sub">第二张图：只写开头段 + 概述 <span class="muted" style="font-weight:400">${esc(t2.title)} · 图在书 ${pg(t2.q)} · 不看它的范文</span></h3>
+      <p class="prompt" lang="en" style="font-size:15px">${esc(t2.prompt)}</p>
+      <span class="label">开头 + 概述<span class="wc" id="draft2-wc"></span></span>
+      <textarea id="draft2" class="essay short" lang="en" spellcheck="false" placeholder="用刚才学到的写法：改写题目一句 + 概述两个主要特征。">${esc(e.draft2 || '')}</textarea>` : ''}
+      <div class="actions"><button class="secondary-button" id="back">← 回去改骨架</button><button class="primary-button" id="done">写完了，去对照 →</button></div>`;
+    const target = q.task === 'T1' ? '目标 150+ 词' : '目标 250+ 词';
+    const upd = () => {
+      const left = e.timer.total - e.timer.used;
+      $('clock').textContent = mmss(left); $('clock').classList.toggle('over', left < 0);
+      $('pause').textContent = e.timer.running ? '暂停' : '继续';
+      $('wc').textContent = `${C.wordCount(e.draft)} 词 · ${target}`;
+      if ($('draft2-wc')) $('draft2-wc').textContent = `${C.wordCount(e.draft2)} 词 · 约 50–70`;
+    };
+    upd();
+    $('pause').onclick = () => { e.timer.running = !e.timer.running; save(); upd(); };
+    host.querySelectorAll('textarea').forEach((x) => x.oninput = () => { e[x.id] = x.value; upd(); saveSoon(); });
+    startTicker(() => { if (e.timer.running) { e.timer.used += 1; e.writeSeconds = e.timer.used; upd(); if (e.timer.used % 5 === 0) save(); } });
+    $('back').onclick = () => { e.timer.running = false; stopTicker(); goStep(e, 2); };
+    $('done').onclick = () => {
+      if (!C.wordCount(e.draft)) { toast('先写一点再对照。'); return; }
+      e.timer.running = false; e.writeSeconds = e.timer.used; stopTicker(); goStep(e, 4);
+    };
+    setTimeout(() => $('draft')?.focus(), 30);
+  }
+
+  /* 模仿 ④ 对照 */
+  function stepCompare(host, r, e) {
+    const q = r.question, t2 = r.then;
+    const pts = q.points.map((n) => pointOf(q, n)).filter(Boolean);
+    const rows = [
+      [`<b>${esc(q.aLabel)}</b>：逐段对比——每段的作用一样吗？中心句有没有写出来？`, q.a],
+      [q.task === 'T2' ? '「翻译范例」：挑 2 句你刚才写不顺的意思，遮住英文中译英' : '「翻译范例」：挑 2 句数据句，遮住英文中译英', q.t || q.q + 1],
+      ['「考官评语」：只看一句，知道范文好在哪', q.c || q.a + 1]
+    ];
+    if (t2) rows.push([`第二张图的范文：只对比开头段和概述`, t2.a]);
+    host.innerHTML = `
+      <h3 class="sub">翻书对照 <span class="muted" style="font-weight:400">约 8 分钟</span></h3>
+      <ol class="keylist">${rows.map(([w, p]) => `<li><span>${w}</span><span class="pg">${pg(p)}</span></li>`).join('')}</ol>
+      <label class="label" for="steal">从范文里偷一个句型<span>以后能套用的结构，挖空具体内容</span></label>
+      <textarea id="steal" class="note" lang="en" placeholder="例：Another benefit of … is that it can …">${esc(e.steal || '')}</textarea>
+      <span class="label">今天真正弄懂的知识点<span>最多 2 条</span></span>
+      <div class="chips" id="learn">${pts.map((p) => `<button class="chip" data-v="${p.key}" aria-pressed="${e.learned.includes(p.key)}" title="${esc(p.hint)}">${p.task === 'T1' ? 'T1 ' : ''}要点 ${p.no}<small>p.${p.page}</small></button>`).join('')}</div>
+      <h3 class="sub">6 分门槛自查 <span class="muted" style="font-weight:400">在你的作文里找到了就点亮 · 原书 p.197–198</span></h3>
+      <div class="chips" id="gate">${D.errors.filter((x) => x.gate).map((x) => `<button class="chip gate" data-v="${x.id}" aria-pressed="${e.errors.includes(x.id)}">${x.label}</button>`).join('')}</div>
+      <details class="peek"><summary>想让 AI 看看你仿写得对不对（可选）</summary>
+        <div class="settings-actions"><button class="secondary-button" id="copy">复制 AI 批改提示词</button></div>
+        <label class="label" for="ai">把 AI 的批改贴在这里</label>
+        <textarea id="ai" class="note" placeholder="可留空">${esc(e.aiFeedback || '')}</textarea>
+      </details>
+      <div class="actions"><button class="secondary-button" id="back">← 回去改作文</button><button class="primary-button" id="finish">完成今天 ✓</button></div>`;
+    $('steal').oninput = (ev) => { e.steal = ev.target.value; saveSoon(); };
+    host.querySelectorAll('#learn .chip').forEach((b) => b.onclick = () => toggleIn(e.learned, b.dataset.v, b, 2));
+    host.querySelectorAll('#gate .chip').forEach((b) => b.onclick = () => toggleIn(e.errors, b.dataset.v, b));
+    const topIds = C.stats(state, D).topErrors.map((x) => errLabel(x.id));
+    $('copy').onclick = () => copy(C.buildPrompt(r, { ...e, topErrors: topIds }, D));
+    $('ai').oninput = (ev) => { e.aiFeedback = ev.target.value; saveSoon(); };
+    $('back').onclick = () => { if (e.timer) e.timer.running = false; goStep(e, 3); };
+    $('finish').onclick = () => { save(); C.complete(state, r.item); save(); ui.justDone = r.item.id; renderToday(); };
   }
 
   /* ② 写 */
@@ -226,7 +356,7 @@
       <div class="rating">${D.dims[task].map(([k, l]) => `<span>${l}</span><div class="seg" data-k="${k}">${RATE.map(([v, t, c]) => `<button class="${c}" data-v="${v}" aria-pressed="${e.ratings[k] === v}">${t}</button>`).join('')}</div>`).join('')}</div>
       <h3 class="sub">6 分门槛自查 <span class="muted" style="font-weight:400">在作文里找到了就点亮 · 原书 p.197–198</span></h3>
       <div class="chips" id="gate">${D.errors.filter((x) => x.gate).map((x) => `<button class="chip gate" data-v="${x.id}" aria-pressed="${e.errors.includes(x.id)}">${x.label}</button>`).join('')}</div>
-      <h3 class="sub">AI 批改（可选）</h3>
+      <h3 class="sub">AI 批改${r.item.real || r.kind === 'mock' || r.kind === 'mockBook' ? ' <span class="tag amber">建议做</span>' : '（可选）'}</h3>
       <div class="settings-actions"><button class="secondary-button" id="copy">复制 AI 批改提示词</button></div>
       <details class="peek"><summary>预览提示词</summary><div class="pane" id="prompt-preview"></div></details>
       <label class="label" for="ai">把 AI 的批改贴在这里<span>方便以后在记录里回看</span></label>
@@ -289,11 +419,12 @@
 
   function nextLabel() {
     const n = C.currentItem(state);
-    if (!n) return C.phaseOf(state) === 'review' ? '复盘（15 分钟）：看清楚强项和弱项' : '题单做完了';
+    if (!n) return C.phaseOf(state) === 'review' ? '阶段总结（15 分钟）：回顾句型卡，选出弱项' : '题单做完了';
     if (n.kind === 'rewrite') return '重写这一轮自评最低的一题';
     if (n.kind === 'mock' || n.kind === 'mockBook') return '60 分钟全真';
     const q = D.questions[n.qid];
-    return `${q.task} · 一道新题（先别看题目）`;
+    if (n.kind === 'imitate') return `${typeLabel(q.type)} · ${n.then ? '模仿一张图 + 第二张图写开头和概述' : n.less ? '再模仿一篇（少看范文）' : '跟着范文模仿'}`;
+    return `${typeLabel(q.type)} · 真题（${q.task === 'T1' ? 20 : 40} 分钟，不看书）`;
   }
 
   function renderDone() {
@@ -305,15 +436,28 @@
       <section class="card done-card">
         <div class="done-mark">✓</div>
         <h2>今天这题完成了</h2>
-        <p>写了 ${Math.round((e.writeSeconds || 0) / 60)} 分钟 · ${words} 词 · 记下 ${e.learned?.length || 0} 条规则、${e.errors?.length || 0} 个错误标签</p>
+        <p>写了 ${Math.round((e.writeSeconds || 0) / 60)} 分钟 · ${words + C.wordCount(e.draft2)} 词${e.steal ? ' · 攒下 1 个句型' : ''} · 记下 ${e.learned?.length || 0} 个知识点、${e.errors?.length || 0} 个错误标签</p>
+        ${unitEnd(it)}
         <div class="next"><span class="muted">下一次：</span>${esc(nextLabel())}</div>
-        <div class="actions" style="justify-content:center"><a class="secondary-button" href="#log">看记录</a><button class="primary-button" id="more">${phase === 'review' ? '去复盘 →' : '再做一题 →'}</button></div>
+        <div class="actions" style="justify-content:center"><a class="secondary-button" href="#log">看记录</a><button class="primary-button" id="more">${phase === 'review' ? '去做阶段总结 →' : '再做一题 →'}</button></div>
         <p class="hint">太累就到此为止。明天打开，直接从下一题开始，不用补。</p>
       </section>`;
     $('more').onclick = () => { ui.justDone = null; renderToday(); };
   }
 
-  /* ---------- 统计 / 复盘 ---------- */
+  function unitEnd(it) {
+    const n = C.currentItem(state);
+    if (!it || it.phase !== 'learn' || !it.unit || (n && n.unit === it.unit)) return '';
+    return it.unit === 'stage' ? '' : `<p class="notice" style="margin:12px 0 0">🎉 ${UNIT(it.unit)}完成。</p>`;
+  }
+
+  function stealsBlock() {
+    const list = state.queue.map((q) => ({ q, e: state.entries[q.id] })).filter(({ e }) => e && e.steal && e.steal.trim());
+    if (!list.length) return '<p class="muted">还没有句型。模仿日的「对照」一步会让你从范文里偷一个。</p>';
+    return `<ol class="steals">${list.map(({ q, e }) => { const qq = D.questions[q.qid]; return `<li><span lang="en">${esc(e.steal)}</span><span class="muted">${qq ? esc(typeLabel(qq.type) + ' · ' + qq.title) : ''}</span></li>`; }).join('')}</ol>`;
+  }
+
+  /* ---------- 统计 / 阶段总结 ---------- */
   function statsBlock(st) {
     const types = st.types.slice().sort((a, b) => (a.avg ?? 9) - (b.avg ?? 9));
     const maxErr = Math.max(1, ...st.topErrors.map((x) => x.n));
@@ -336,18 +480,21 @@
     if (!ui.weakPick) ui.weakPick = C.suggestWeak(st);
     view.innerHTML = intro('review', null) + `
       <section class="card">
-        <h2 class="sec">复盘：你的强项和弱项</h2>
-        <p class="hint">数据来自你过去两周的自评和错误标签。系统先帮你选了自评最低的两种题型，可以改。</p>
+        <h2 class="sec">阶段总结：模仿期结束</h2>
+        <h3 class="sub">你攒下的句型 <span class="muted" style="font-weight:400">读一遍，真题期直接用</span></h3>
+        ${stealsBlock()}
+        <h3 class="sub">强项和弱项</h3>
+        <p class="hint">自评来自 5 个大作文真题日（模仿日不打分，小作文按你自己的感觉选）。系统先帮你选了自评最低的两种题型，可以改。</p>
         ${statsBlock(st)}
-        <h3 class="sub">接下来两周重点练（选 2 个）</h3>
+        <h3 class="sub">真题期重点练（选 2 个）</h3>
         <div class="chips" id="weak">${Object.entries(D.types).map(([k, t]) => `<button class="chip" data-v="${k}" aria-pressed="${ui.weakPick.includes(k)}">${t.task} ${t.label}</button>`).join('')}</div>
-        <p class="hint">针对期每周 6 次：4 次练这两种题型，1 次换别的题型，1 次重写。之后进入 3 套全真。交稿前只查你的「错误前 5 名」。</p>
-        <div class="actions"><span></span><button class="primary-button" id="gen">生成针对期题单 →</button></div>
+        <p class="hint">真题期每周 6 次，全部计时、不看书：4 次练这两种题型，1 次换别的题型，1 次重写。之后进入 3 套全真。交稿前只查你的「错误前 5 名」。</p>
+        <div class="actions"><span></span><button class="primary-button" id="gen">生成真题期题单 →</button></div>
       </section>`;
     view.querySelectorAll('#weak .chip').forEach((b) => b.onclick = () => toggleIn(ui.weakPick, b.dataset.v, b, 2));
     $('gen').onclick = () => {
       if (!ui.weakPick.length) { toast('至少选 1 种题型。'); return; }
-      C.applyReview(state, D, ui.weakPick); save(); ui.weakPick = null; toast('已生成针对期题单'); renderToday();
+      C.applyReview(state, D, ui.weakPick); save(); ui.weakPick = null; toast('已生成真题期题单'); renderToday();
     };
   }
 
@@ -375,20 +522,21 @@
     const item = (it) => {
       const e = state.entries[it.id];
       const r = C.resolve(state, D, it);
-      const title = r.kind === 'mockBook' ? r.mock.title : r.kind === 'mock' ? '全真 60′：' + r.questions.map((q) => q.title).join(' + ') : r.question ? (r.kind === 'rewrite' ? '重写：' : '') + r.question.title : '重写';
+      const title = r.kind === 'mockBook' ? r.mock.title : r.kind === 'mock' ? '全真 60′：' + r.questions.map((q) => q.title).join(' + ') : r.question ? (r.kind === 'rewrite' ? '重写：' : r.kind === 'imitate' ? '模仿：' : '') + r.question.title : '重写';
       const sc = C.ratingScore(e);
       const dots = sc == null ? '' : '●'.repeat(Math.round(sc)) + '○'.repeat(3 - Math.round(sc));
       const d = new Date(e.finishedAt);
       return `<div class="log-item">
         <div class="log-head"><b>${esc(title)}</b><span class="muted" style="font-size:12px">${d.getMonth() + 1}/${d.getDate()} · ${Math.round((e.writeSeconds || 0) / 60)} 分 · ${C.wordCount(e.draft) + C.wordCount(e.draft1)} 词 <span class="dots" title="自评">${dots}</span></span></div>
         <div class="log-meta">${r.question && r.kind !== 'mock' ? `<span class="tag">${typeLabel(r.question.type)}</span>` : ''}${e.judgedType && r.question ? `<span class="tag ${e.judgedType === r.question.type ? 'green' : 'red'}">判断${e.judgedType === r.question.type ? '对' : '错'}</span>` : ''}${e.light ? '<span class="tag amber">15 分钟版</span>' : ''}${(e.errors || []).map((x) => `<span class="tag red">${esc(errLabel(x))}</span>`).join('')}${(e.learned || []).map((k) => `<span class="tag green">要点 ${esc(k.replace('T', 'T1-'))}</span>`).join('')}</div>
-        ${e.learnNote ? `<p class="hint">✎ ${esc(e.learnNote)}</p>` : ''}
-        <details><summary>看作文${e.aiFeedback ? '和 AI 批改' : ''}</summary>${e.draft1 ? `<div class="pane">${esc(e.draft1)}</div>` : ''}<div class="pane">${esc(e.draft || '')}</div>${e.aiFeedback ? `<div class="pane" style="font-family:inherit">${esc(e.aiFeedback)}</div>` : ''}</details>
+        ${e.learnNote ? `<p class="hint">✎ ${esc(e.learnNote)}</p>` : ''}${e.steal ? `<p class="hint" lang="en">★ ${esc(e.steal)}</p>` : ''}
+        <details><summary>看作文${e.aiFeedback ? '和 AI 批改' : ''}</summary>${e.draft1 ? `<div class="pane">${esc(e.draft1)}</div>` : ''}<div class="pane">${esc(e.draft || '')}</div>${e.draft2 ? `<div class="pane">${esc(e.draft2)}</div>` : ''}${e.aiFeedback ? `<div class="pane" style="font-family:inherit">${esc(e.aiFeedback)}</div>` : ''}</details>
       </div>`;
     };
     view.innerHTML = `
-      <section class="intro"><div><p class="eyebrow">Your record</p><h1>记录</h1><p class="intro-note">两周后，这一页会告诉你该练什么。</p></div></section>
+      <section class="intro"><div><p class="eyebrow">Your record</p><h1>记录</h1><p class="intro-note">模仿期结束时，这一页会告诉你该练什么。</p></div></section>
       <section class="card">${statsBlock(st)}</section>
+      <section class="card"><h2 class="sec">我的句型卡</h2>${stealsBlock()}</section>
       <section class="card"><h2 class="sec">写过的题</h2>${done.length ? done.map(item).join('') : '<p class="muted">还没有完成的题。去「今日」写第一题。</p>'}</section>`;
   }
 
@@ -458,15 +606,9 @@
   };
   let dirty = false;
   dlg.addEventListener('close', () => { if (dirty) { dirty = false; route(); } });
-  $('import-prompts').onchange = async (ev) => {
-    const f = ev.target.files[0]; if (!f) return;
-    try { const n = C.importPrompts(state, await f.text(), D); save(); dirty = true; msg(`已导入 ${n} 道题目原文，只保存在这台设备。`); }
-    catch (err) { msg(err.message || '导入失败', true); }
-    ev.target.value = '';
-  };
   $('reset').onclick = () => {
     if (!confirm('清空「每日一题」的全部记录？（100句的进度不受影响）')) return;
-    const theme = state.settings.theme, prompts = state.prompts; state = C.createState(D); state.settings.theme = theme; state.prompts = prompts || {}; save(); ui = { justDone: null, weakPick: null, lookupQ: '' }; dirty = true; msg('已清空。');
+    const theme = state.settings.theme; state = C.createState(D); state.settings.theme = theme; save(); ui = { justDone: null, weakPick: null, lookupQ: '' }; dirty = true; msg('已清空。');
   };
 
   applyTheme();

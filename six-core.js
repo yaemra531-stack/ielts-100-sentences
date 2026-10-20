@@ -9,22 +9,24 @@
 
   function createState(data, now = Date.now()) {
     return {
-      v: 1,
+      v: 2,
       createdAt: now,
-      queue: data.explore.map((it, i) => ({ ...clone(it), id: 'E' + pad(i + 1), phase: 'explore' })),
+      queue: data.learn.map((it, i) => ({ ...clone(it), id: 'L' + pad(i + 1), phase: 'learn' })),
       cursor: 0,
       entries: {},
       review: null,
-      settings: { pdfOffset: data.pdfOffset },
-      prompts: {}
+      settings: { pdfOffset: data.pdfOffset }
     };
   }
 
   function normalize(raw, data) {
-    if (!raw || raw.v !== 1 || !Array.isArray(raw.queue) || typeof raw.entries !== 'object') return null;
+    if (!raw || typeof raw !== 'object') return null;
+    /* 旧版（先写后查的混乱期）：换成模仿期题单，只保留设置 */
+    if (raw.v === 1 && raw.settings) { const s = createState(data); s.settings = { ...s.settings, ...raw.settings }; return s; }
+    if (raw.v !== 2 || !Array.isArray(raw.queue) || typeof raw.entries !== 'object') return null;
     const s = { ...createState(data, raw.createdAt || Date.now()), ...raw };
     s.settings = { pdfOffset: data.pdfOffset, ...(raw.settings || {}) };
-    s.prompts = raw.prompts && typeof raw.prompts === 'object' ? raw.prompts : {};
+    delete s.prompts;
     s.cursor = Math.max(0, Math.min(Number(s.cursor) || 0, s.queue.length));
     return s;
   }
@@ -32,16 +34,13 @@
   const currentItem = (s) => s.queue[s.cursor] || null;
   const pdf = (s, page) => page + (Number(s.settings.pdfOffset) || 0);
 
-  /* 题目对象：书里的数据 + 本机导入的英文原文（如果有） */
   function question(s, data, id) {
     const q = data.questions[id];
-    if (!q) return null;
-    const prompt = s && s.prompts && typeof s.prompts[id] === 'string' ? s.prompts[id] : q.prompt;
-    return { ...q, id, prompt: prompt || '' };
+    return q ? { ...q, id, prompt: q.prompt || '' } : null;
   }
 
   function questionsOf(item, data, s) {
-    if (item.kind === 'question') return [question(s, data, item.qid)].filter(Boolean);
+    if (item.kind === 'question' || item.kind === 'imitate') return [question(s, data, item.qid)].filter(Boolean);
     if (item.kind === 'mock' && item.parts) return item.parts.map((id) => question(s, data, id)).filter(Boolean);
     return [];
   }
@@ -75,7 +74,9 @@
     }
     if (item.kind === 'mockBook') return { item, kind: 'mockBook', mock: data.mocks.find((m) => m.id === item.mid) };
     const qs = questionsOf(item, data, s);
-    return { item, kind: item.kind, questions: qs, question: qs[0] };
+    const r = { item, kind: item.kind, questions: qs, question: qs[0] };
+    if (item.kind === 'imitate' && item.then) r.then = question(s, data, item.then);
+    return r;
   }
 
   function minutesFor(r) {
@@ -83,6 +84,7 @@
     if (r.kind === 'mock' || r.kind === 'mockBook') return 60;
     const q = r.question;
     if (!q) return 25;
+    if (r.kind === 'imitate') return q.task === 'T1' ? 20 : 25;
     if (q.task === 'T1') return 20;
     return r.item.full ? 40 : 25;
   }
@@ -109,8 +111,8 @@
   function phaseOf(s) {
     const item = currentItem(s);
     if (item) return item.phase;
-    const exploreDone = s.queue.filter((q) => q.phase === 'explore').every((q) => s.entries[q.id]?.status === 'done');
-    if (exploreDone && !s.review) return 'review';
+    const learnDone = s.queue.filter((q) => q.phase === 'learn').every((q) => s.entries[q.id]?.status === 'done');
+    if (learnDone && !s.review) return 'review';
     return 'free';
   }
 
@@ -135,15 +137,16 @@
 
   function stats(s, data) {
     const byType = {}, errCount = {}, stuckCount = {};
-    let judged = 0, judgedRight = 0, writeSecs = 0, writeN = 0, done = 0;
+    let judged = 0, judgedRight = 0, writeSecs = 0, writeN = 0, done = 0, steals = 0;
     for (const it of s.queue) {
       const e = s.entries[it.id];
       if (!e || e.status !== 'done') continue;
       done += 1;
+      if (e.steal && e.steal.trim()) steals += 1;
       (e.errors || []).forEach((x) => (errCount[x] = (errCount[x] || 0) + 1));
       (e.stuck || []).forEach((x) => (stuckCount[x] = (stuckCount[x] || 0) + 1));
       if (e.writeSeconds) { writeSecs += e.writeSeconds; writeN += 1; }
-      const q = it.kind === 'question' ? data.questions[it.qid] : null;
+      const q = it.kind === 'question' || it.kind === 'imitate' ? data.questions[it.qid] : null;
       if (!q) continue;
       if (e.judgedType) { judged += 1; if (e.judgedType === q.type) judgedRight += 1; }
       const sc = ratingScore(e);
@@ -153,14 +156,15 @@
     }
     const types = Object.values(byType).map((t) => ({ ...t, avg: t.rated ? t.sum / t.rated : null }));
     const topErrors = Object.entries(errCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, n]) => ({ id, n }));
-    return { done, types, errCount, topErrors, stuckCount, judgeRate: judged ? judgedRight / judged : null, judged, avgWriteMin: writeN ? writeSecs / writeN / 60 : null };
+    return { done, steals, types, errCount, topErrors, stuckCount, judgeRate: judged ? judgedRight / judged : null, judged, avgWriteMin: writeN ? writeSecs / writeN / 60 : null };
   }
 
   function suggestWeak(st) {
     return st.types.filter((t) => t.avg != null).sort((a, b) => a.avg - b.avg || b.n - a.n).slice(0, 2).map((t) => t.type);
   }
 
-  /* 复盘后生成：针对期 2 周（6 成练弱项）+ 全真期 3 套 */
+  /* 阶段总结后生成：真题期 2 周（6 成练弱项，全部计时、不看书）+ 全真期 3 套。
+   * 模仿期里只写了开头和概述的第二张图（then）还算没写过，可以在真题期整篇写。 */
   function applyReview(s, data, weakTypes, now = Date.now()) {
     const st = stats(s, data);
     const used = new Set(s.queue.flatMap((q) => [q.qid, ...(q.parts || [])]).filter(Boolean));
@@ -181,7 +185,7 @@
       slots.forEach((t, k) => {
         if (t === 'rewrite') return out.push({ kind: 'rewrite' });
         const id = take((q) => q.type === t) || take((q) => data.types[t] && q.task === data.types[t].task) || take(() => true);
-        if (id) out.push({ kind: 'question', qid: id, full: k === 5 && data.questions[id].task === 'T2' });
+        if (id) out.push({ kind: 'question', qid: id, full: true, real: true });
       });
       t1Rot.push(t1Rot.shift()); t2Rot.push(t2Rot.shift());
     }
@@ -196,11 +200,13 @@
     const q = r.question || {};
     const isT1 = q.task === 'T1';
     const top = (entry.topErrors || []).join('、');
+    const imit = r.kind === 'imitate';
     return [
       '你是严格但友善的雅思写作考官。我的目标是写作 6–6.5 分。',
       `题目（${isT1 ? 'Task 1，图在书上' : 'Task 2'}）：${q.prompt || '（请把书上的题目粘贴在这里）'}`,
-      `我的作文（限时 ${minutesFor(r)} 分钟，${wordCount(entry.draft)} 词）：`,
+      imit ? `我的作文（模仿练习：参照书上范文的结构写的，${wordCount(entry.draft)} 词）：` : `我的作文（限时 ${minutesFor(r)} 分钟，${wordCount(entry.draft)} 词）：`,
       entry.draft || '（未填写）',
+      imit ? '这是仿写，结构参考了范文。请重点看：我换成自己的观点和句子后，有没有写错、有没有写偏题。' : '',
       '',
       '请输出：',
       `1. ${isT1 ? 'TA / CC / LR / GRA' : 'TR / CC / LR / GRA'} 四项估分，每项一句依据并引用原文`,
@@ -221,17 +227,5 @@
     return s;
   }
 
-  /* 题目原文包：{ format: 'ielts6-prompts', version: 1, prompts: { 题目编号: 英文原文 } } */
-  function importPrompts(s, text, data) {
-    const obj = JSON.parse(text);
-    if (!obj || obj.format !== 'ielts6-prompts' || typeof obj.prompts !== 'object') throw new Error('文件格式不对：不是「题目原文包」。');
-    let n = 0;
-    for (const [id, t] of Object.entries(obj.prompts)) {
-      if (data.questions[id] && typeof t === 'string' && t.trim()) { s.prompts[id] = t.trim(); n += 1; }
-    }
-    if (!n) throw new Error('原文包里没有能对上题号的题目。');
-    return n;
-  }
-
-  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, importPrompts, question, pdf };
+  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf };
 })(typeof window !== 'undefined' ? window : globalThis);
