@@ -43,6 +43,7 @@ await p.waitForTimeout(2300);
 await shot('03-imitate');
 await p.click('#done');
 await p.fill('#steal', 'Another benefit of … is that it can …');
+await p.fill('#chunks', '税收收入 = tax revenue\n正常运转 = function properly');
 await p.click('#learn .chip >> nth=0');
 await p.click('#gate .chip[data-v="comma"]');
 await shot('04-compare');
@@ -51,6 +52,60 @@ await shot('05-done');
 let s = await st();
 if (s.cursor !== 1 || s.entries.L01.status !== 'done' || s.entries.L01.steal !== 'Another benefit of … is that it can …' || !s.entries.L01.plan.s2) fail('模仿日状态未保存');
 if (await p.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('ielts100.') && k !== 'ielts100.theme.v1'))) fail('碰了 ielts100.*');
+
+// ===== 练习：完成卡入口 → 一轮 10 题（错题本轮末再出）→ 结果 → 错题/我的词块 =====
+if (s.entries.L01.chunks.split('\n').length !== 2) fail('词块未保存');
+if (!(await p.textContent('#to-drill')).includes('做今天的练习')) fail('完成卡应有练习入口');
+await p.click('#to-drill'); await p.waitForTimeout(100);
+if (!p.url().endsWith('#drill/B2.2.9')) fail('应进入第 1 天练习');
+const solve = () => p.evaluate(() => {
+  const P = window.SIX_DRILLS.packs['B2.2.9'].items;
+  const zh = document.querySelector('.drill-zh'), q = document.querySelector('.drill-q'), h = document.querySelector('.drill .hint');
+  if (zh) return { type: 'chunk', val: [P.find((x) => x.type === 'chunk' && x.zh === zh.textContent).en.split(' / ')[0]] };
+  if (q) return { type: 'choice', a: P.find((x) => x.type === 'choice' && x.q === q.textContent).a };
+  const x = P.find((y) => y.type === 'cloze' && y.zh === h.textContent);
+  return { type: 'cloze', val: [...x.text.matchAll(/\{([^}]+)\}/g)].map((m) => m[1].split('/')[0]) };
+});
+let sawRetry = false, n = 0;
+for (; n < 30 && !(await p.isVisible('.done-card')); n++) {
+  const a = await solve(), wrong = n === 0;
+  if ((await p.textContent('.drill .meta')).includes('再来一次')) sawRetry = true;
+  if (a.type === 'choice') {
+    if (wrong) await p.click(`.opt:not([data-i="${a.a}"]) >> nth=0`); else await p.keyboard.press('ABCD'[await p.locator('.opt').evaluateAll((bs, i) => bs.findIndex((b) => Number(b.dataset.i) === i), a.a)].toLowerCase());
+  } else {
+    const ins = p.locator('#ans, .blank');
+    for (let k = 0; k < a.val.length; k++) await ins.nth(k).fill(wrong ? 'zzz' : a.val[k]);
+    await ins.nth(a.val.length - 1).press('Enter');
+  }
+  await p.waitForSelector('.verdict');
+  const miss = await p.isVisible('.verdict.miss');
+  if (miss !== wrong && !(n > 9 && !wrong && !miss)) fail(`第 ${n + 1} 题核对结果不对`);
+  if (n === 0) await shot('20-drill-wrong');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(30);
+}
+if (!sawRetry) fail('做错的题应在本轮末再出一次');
+if (n !== 11) fail(`一轮应是 10 题 + 1 道重做，实际 ${n}`);
+if (!(await text()).includes('9 / 10 一次答对')) fail('结果页应统计一次答对');
+await shot('21-drill-end');
+s = await st();
+if (Object.keys(s.drill).length !== 10 || Object.values(s.drill).filter((r) => r.bad && !r.streak).length !== 1) fail('练习记录不对');
+await p.click('#home');
+if ((await p.textContent('#srcs .chip[data-v="wrong"]')).trim() !== '错题1') fail('错题应为 1');
+if ((await p.textContent('#srcs .chip[data-v="mine"]')).trim() !== '我的词块2') fail('我的词块应为 2');
+await p.click('#srcs .chip[data-v="mine"]');
+await p.click('#go');
+if (!(await p.textContent('.drill-zh')).match(/税收收入|正常运转/)) fail('应出自己的词块');
+await p.fill('#ans', 'tax revenues');
+await p.press('#ans', 'Enter');
+if (!(await p.isVisible('#override'))) fail('判错时应可「算我对」');
+await p.click('#override');
+s = await st();
+if (Object.values(s.drill).filter((r) => r.bad && !r.streak).length !== 1) fail('算我对后不应多一道错题');
+await shot('22-drill-mine');
+await p.goto(url + '#drill'); await p.waitForTimeout(100);
+await shot('23-drill-home');
+await p.goto(url + '#today'); await p.waitForTimeout(100);
 
 // ===== 真题日（第 3 天）：见题 → 写 → 对答案 → 记录 =====
 await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('ielts6.v1')); s.entries.L02 = { itemId: 'L02', status: 'done', step: 4, draft: 'x', errors: [], stuck: [], learned: [], ratings: {}, finishedAt: Date.now() }; s.cursor = 2; localStorage.setItem('ielts6.v1', JSON.stringify(s)); });

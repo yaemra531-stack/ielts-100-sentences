@@ -15,6 +15,7 @@
       cursor: 0,
       entries: {},
       review: null,
+      drill: {},
       settings: { pdfOffset: data.pdfOffset }
     };
   }
@@ -27,6 +28,7 @@
     const s = { ...createState(data, raw.createdAt || Date.now()), ...raw };
     s.settings = { pdfOffset: data.pdfOffset, ...(raw.settings || {}) };
     delete s.prompts;
+    if (!s.drill || typeof s.drill !== 'object') s.drill = {};
     s.cursor = Math.max(0, Math.min(Number(s.cursor) || 0, s.queue.length));
     return s;
   }
@@ -219,6 +221,112 @@
     ].filter((x) => x !== '').join('\n');
   }
 
+
+  /* ---------- 配套练习（词块默写 / 句型填空 / 选择题） ---------- */
+  const norm = (t) => String(t ?? '').toLowerCase().replace(/[’‘`]/g, "'").replace(/[-–—]/g, ' ')
+    .replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const alts = (t) => String(t || '').split(/\s+\/\s+|\//).map((x) => x.trim()).filter(Boolean);
+  const HAN = /[\u3400-\u9fff]/;
+
+  /* 「中文 = English」一行一个；两边顺序随意，= ＝ ： Tab 都能分隔 */
+  function parseChunks(text) {
+    const out = [];
+    String(text || '').split(/\n+/).forEach((line) => {
+      const m = line.replace(/^\s*[-*•\d.、)]+\s*/, '').split(/\s*(?:=|＝|\t|：| : )\s*/);
+      if (m.length < 2) return;
+      let [a, b] = [m[0].trim(), m.slice(1).join(' ').trim()];
+      if (!a || !b) return;
+      if (HAN.test(b) && !HAN.test(a)) [a, b] = [b, a];
+      if (!HAN.test(a) || HAN.test(b)) return;
+      out.push({ zh: a, en: b });
+    });
+    return out;
+  }
+
+  /* 把 {答案/备选} 拆成文字片段和空 */
+  function clozeParts(text) {
+    const parts = [], blanks = [];
+    let last = 0;
+    String(text || '').replace(/\{([^}]+)\}/g, (m, inner, at) => { parts.push(text.slice(last, at)); blanks.push(alts(inner)); last = at + m.length; return m; });
+    parts.push(String(text || '').slice(last));
+    return { parts, blanks, full: parts.map((p, i) => p + (blanks[i] ? blanks[i][0] : '')).join('') };
+  }
+
+  const hash = (t) => { let h = 0; for (const ch of String(t)) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h.toString(36); };
+
+  function mineItems(s, data) {
+    const out = [], seen = new Set();
+    s.queue.forEach((it) => {
+      const e = s.entries[it.id];
+      if (!e || !e.chunks) return;
+      const qq = data.questions[it.qid];
+      parseChunks(e.chunks).forEach((c) => {
+        const id = 'm:' + hash(c.zh + '=' + c.en);
+        if (seen.has(id)) return;
+        seen.add(id);
+        out.push({ id, type: 'chunk', zh: c.zh, en: c.en, from: qq ? qq.title : '' });
+      });
+    });
+    return out;
+  }
+
+  function packItems(drills, qid) {
+    const p = drills && drills.packs && drills.packs[qid];
+    return p ? p.items.map((x) => ({ ...x, pack: qid })) : [];
+  }
+
+  const isWrong = (s, id) => { const d = s.drill && s.drill[id]; return !!(d && d.bad && !d.streak); };
+
+  function drillItems(s, data, drills, source) {
+    const packs = Object.keys((drills && drills.packs) || {});
+    const all = () => [...packs.flatMap((k) => packItems(drills, k)), ...mineItems(s, data)];
+    if (source === 'mine') return mineItems(s, data);
+    if (source === 'wrong') return all().filter((x) => isWrong(s, x.id));
+    if (source === 'all' || !source) return all();
+    return packItems(drills, source);
+  }
+
+  function shuffle(arr, rng = Math.random) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
+  /* 一轮：上次做错的优先 → 没做过的 → 连对次数少、隔得久的 */
+  function buildRound(items, s, n = 10, rng = Math.random) {
+    const d = s.drill || {};
+    const rank = (x) => { const r = d[x.id]; if (!r) return 1; if (r.bad && !r.streak) return 0; return 2 + Math.min(r.streak, 5); };
+    return shuffle(items, rng).map((x) => ({ x, r: rank(x), t: (d[x.id] && d[x.id].last) || 0 }))
+      .sort((a, b) => a.r - b.r || a.t - b.t).slice(0, n).map((o) => o.x);
+  }
+
+  function checkAnswer(item, answer) {
+    if (item.type === 'choice') return { ok: Number(answer) === item.a };
+    if (item.type === 'cloze') {
+      const { blanks } = clozeParts(item.text);
+      const given = Array.isArray(answer) ? answer : [answer];
+      const per = blanks.map((b, i) => b.some((alt) => norm(alt) === norm(given[i])));
+      return { ok: per.every(Boolean), per };
+    }
+    const n = norm(answer);
+    return { ok: !!n && alts(item.en).some((alt) => norm(alt) === n) };
+  }
+
+  function recordDrill(s, id, ok, now = Date.now()) {
+    s.drill = s.drill || {};
+    const r = (s.drill[id] = s.drill[id] || { ok: 0, bad: 0, streak: 0, last: 0 });
+    if (ok) { r.ok += 1; r.streak += 1; } else { r.bad += 1; r.streak = 0; }
+    r.last = now;
+    return r;
+  }
+
+  function drillStats(s, items) {
+    const d = s.drill || {};
+    let seen = 0, mastered = 0, wrong = 0;
+    items.forEach((x) => { const r = d[x.id]; if (!r) return; seen += 1; if (r.streak >= 2) mastered += 1; if (r.bad && !r.streak) wrong += 1; });
+    return { total: items.length, seen, mastered, wrong };
+  }
+
   function exportJSON(s) { return JSON.stringify({ app: 'ielts6', exportedAt: new Date().toISOString(), state: s }, null, 2); }
   function importJSON(text, data) {
     const obj = JSON.parse(text);
@@ -227,5 +335,5 @@
     return s;
   }
 
-  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf };
+  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf, norm, alts, parseChunks, clozeParts, drillItems, buildRound, checkAnswer, recordDrill, drillStats, shuffle };
 })(typeof window !== 'undefined' ? window : globalThis);

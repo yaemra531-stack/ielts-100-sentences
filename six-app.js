@@ -36,10 +36,11 @@
 
   /* ---------- 路由 ---------- */
   function route() {
-    const tab = (location.hash || '#today').slice(1);
+    const [tab, arg] = decodeURIComponent((location.hash || '#today').slice(1)).split('/');
     document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
     stopTicker();
-    if (tab === 'log') renderLog();
+    if (tab === 'drill') renderDrill(arg);
+    else if (tab === 'log') renderLog();
     else if (tab === 'lookup') renderLookup();
     else renderToday();
     window.scrollTo(0, 0);
@@ -262,6 +263,8 @@
       <ol class="keylist">${rows.map(([w, p]) => `<li><span>${w}</span><span class="pg">${pg(p)}</span></li>`).join('')}</ol>
       <label class="label" for="steal">从范文里偷一个句型<span>以后能套用的结构，挖空具体内容</span></label>
       <textarea id="steal" class="note" lang="en" placeholder="例：Another benefit of … is that it can …">${esc(e.steal || '')}</textarea>
+      <label class="label" for="chunks">今天收的词块<span>一行一个：中文 = English，会进「练习」里的「我的词块」</span></label>
+      <textarea id="chunks" class="note" placeholder="可支配收入 = disposable income">${esc(e.chunks || '')}</textarea>
       <span class="label">今天真正弄懂的知识点<span>最多 2 条</span></span>
       <div class="chips" id="learn">${pts.map((p) => `<button class="chip" data-v="${p.key}" aria-pressed="${e.learned.includes(p.key)}" title="${esc(p.hint)}">${p.task === 'T1' ? 'T1 ' : ''}要点 ${p.no}<small>p.${p.page}</small></button>`).join('')}</div>
       <h3 class="sub">6 分门槛自查 <span class="muted" style="font-weight:400">在你的作文里找到了就点亮 · 原书 p.197–198</span></h3>
@@ -273,6 +276,7 @@
       </details>
       <div class="actions"><button class="secondary-button" id="back">← 回去改作文</button><button class="primary-button" id="finish">完成今天 ✓</button></div>`;
     $('steal').oninput = (ev) => { e.steal = ev.target.value; saveSoon(); };
+    $('chunks').oninput = (ev) => { e.chunks = ev.target.value; saveSoon(); };
     host.querySelectorAll('#learn .chip').forEach((b) => b.onclick = () => toggleIn(e.learned, b.dataset.v, b, 2));
     host.querySelectorAll('#gate .chip').forEach((b) => b.onclick = () => toggleIn(e.errors, b.dataset.v, b));
     const topIds = C.stats(state, D).topErrors.map((x) => errLabel(x.id));
@@ -438,11 +442,20 @@
         <h2>今天这题完成了</h2>
         <p>写了 ${Math.round((e.writeSeconds || 0) / 60)} 分钟 · ${words + C.wordCount(e.draft2)} 词${e.steal ? ' · 攒下 1 个句型' : ''} · 记下 ${e.learned?.length || 0} 个知识点、${e.errors?.length || 0} 个错误标签</p>
         ${unitEnd(it)}
+        ${drillLink(it, e)}
         <div class="next"><span class="muted">下一次：</span>${esc(nextLabel())}</div>
         <div class="actions" style="justify-content:center"><a class="secondary-button" href="#log">看记录</a><button class="primary-button" id="more">${phase === 'review' ? '去做阶段总结 →' : '再做一题 →'}</button></div>
         <p class="hint">太累就到此为止。明天打开，直接从下一题开始，不用补。</p>
       </section>`;
     $('more').onclick = () => { ui.justDone = null; renderToday(); };
+    if ($('to-drill')) $('to-drill').onclick = () => { ui.justDone = null; };
+  }
+
+  function drillLink(it, e) {
+    const n = (it && DR.packs[it.qid] ? DR.packs[it.qid].items.length : 0);
+    const m = C.parseChunks(e.chunks).length;
+    if (!n && !m) return '';
+    return `<p style="margin:16px 0 0"><a class="primary-button" id="to-drill" href="#drill/${n ? esc(it.qid) : 'mine'}">做今天的练习（${n || m} 题）→</a></p>`;
   }
 
   function unitEnd(it) {
@@ -538,6 +551,156 @@
       <section class="card">${statsBlock(st)}</section>
       <section class="card"><h2 class="sec">我的句型卡</h2>${stealsBlock()}</section>
       <section class="card"><h2 class="sec">写过的题</h2>${done.length ? done.map(item).join('') : '<p class="muted">还没有完成的题。去「今日」写第一题。</p>'}</section>`;
+  }
+
+  /* ---------- 练习（词块默写 / 句型填空 / 选择题） ---------- */
+  const DR = window.SIX_DRILLS || { packs: {} };
+  const KIND = { chunk: '词块默写', cloze: '句型填空', choice: '选择' };
+
+  function drillSources() {
+    const packs = Object.entries(DR.packs).map(([id, p]) => ({ id, label: p.title }));
+    return [...packs, { id: 'mine', label: '我的词块' }, { id: 'wrong', label: '错题' }, { id: 'all', label: '全部' }]
+      .map((x) => ({ ...x, items: C.drillItems(state, D, DR, x.id) }));
+  }
+  const srcLabel = (id) => (DR.packs[id] ? DR.packs[id].title : { mine: '我的词块', wrong: '错题', all: '全部' }[id] || id);
+  const answerText = (x) => x.type === 'chunk' ? C.alts(x.en)[0] : x.type === 'cloze' ? C.clozeParts(x.text).full : x.opts[x.a];
+
+  function renderDrill(arg) {
+    const valid = (id) => DR.packs[id] || ['mine', 'wrong', 'all'].includes(id);
+    if (arg && valid(arg) && (!ui.drill || ui.drill.source !== arg || ui.drill.over)) return startRound(arg);
+    if (ui.drill && !ui.drill.over) return drawQuestion();
+    drillHome(ui.drillSrc || Object.keys(DR.packs)[0] || 'mine');
+  }
+
+  function drillHome(sel) {
+    ui.drill = null; ui.drillSrc = sel;
+    const srcs = drillSources();
+    const cur = srcs.find((x) => x.id === sel) || srcs[0];
+    const st = C.drillStats(state, srcs.find((x) => x.id === 'all').items);
+    const mine = srcs.find((x) => x.id === 'mine').items;
+    const kinds = Object.keys(KIND).map((k) => [k, cur.items.filter((x) => x.type === k).length]).filter(([, n]) => n);
+    view.innerHTML = `
+      <section class="intro">
+        <div><p class="eyebrow">Drill</p><h1>练习</h1><p class="intro-note">做完一天的题，把读题、ABC、句型和词块练熟。每轮 10 题，约 5 分钟。</p></div>
+        <div class="stats">
+          <div><span class="stat-num">${st.total}</span><span class="stat-label">题库</span></div>
+          <div><span class="stat-num">${st.mastered}</span><span class="stat-label">已掌握（连对 2 次）</span></div>
+          <div><span class="stat-num">${st.wrong}</span><span class="stat-label">错题</span></div>
+        </div>
+      </section>
+      <section class="card">
+        <span class="label" style="margin-top:0">练哪些</span>
+        <div class="chips" id="srcs">${srcs.map((x) => `<button class="chip" data-v="${esc(x.id)}" aria-pressed="${x.id === cur.id}">${esc(x.label)}<small>${x.items.length}</small></button>`).join('')}</div>
+        <p class="hint">${kinds.length ? kinds.map(([k, n]) => `${KIND[k]} ${n}`).join(' · ') : cur.id === 'mine' ? '还没有自己的词块：在模仿日「对照」一步，按「中文 = English」一行一个记下来。' : cur.id === 'wrong' ? '没有错题 👍' : '这里还没有题。'}</p>
+        ${DR.packs[cur.id]?.note ? `<p class="hint" lang="en">${esc(DR.packs[cur.id].note)}</p>` : ''}
+        <div class="actions"><span class="hint" style="margin:0">回车 = 核对 / 下一题。错的题本轮最后再出一次。</span><button class="primary-button" id="go" ${cur.items.length ? '' : 'disabled'}>开始一轮（${Math.min(10, cur.items.length)} 题）→</button></div>
+        ${mine.length ? `<details class="peek"><summary>我的词块（${mine.length}）</summary><ul class="hint">${mine.map((x) => `<li>${esc(x.zh)} = <span lang="en">${esc(x.en)}</span>${x.from ? ` <span class="muted">· ${esc(x.from)}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
+      </section>`;
+    view.querySelectorAll('#srcs .chip').forEach((b) => b.onclick = () => drillHome(b.dataset.v));
+    $('go').onclick = () => startRound(cur.id);
+  }
+
+  function startRound(source, onlyIds) {
+    let items = C.drillItems(state, D, DR, source);
+    if (onlyIds) items = items.filter((x) => onlyIds.includes(x.id));
+    const round = onlyIds ? C.shuffle(items) : C.buildRound(items, state, 10);
+    if (!round.length) return drillHome(source);
+    ui.drillSrc = source;
+    ui.drill = { source, list: round, i: 0, shown: false, first: {}, retried: {}, prev: {}, over: false };
+    if (location.hash !== '#drill/' + source) history.replaceState(null, '', '#drill/' + source);
+    drawQuestion();
+  }
+
+  function drawQuestion() {
+    const R = ui.drill, x = R.list[R.i];
+    if (!x) return drillEnd();
+    const isRetry = R.list.indexOf(x) !== R.i;
+    let body = '';
+    if (x.type === 'chunk') body = `<p class="drill-zh">${esc(x.zh)}</p><input type="text" id="ans" lang="en" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="英文">`;
+    else if (x.type === 'cloze') {
+      const { parts, blanks } = C.clozeParts(x.text);
+      body = `<p class="hint" style="font-size:14px">${esc(x.zh)}</p><p class="drill-sent" lang="en">${parts.map((p, i) => esc(p) + (blanks[i] ? `<input type="text" class="blank" data-i="${i}" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:${Math.max(5, blanks[i][0].length + 3)}ch" aria-label="第 ${i + 1} 空">` : '')).join('')}</p>`;
+    } else {
+      R.order = R.order && R.order.id === x.id ? R.order : { id: x.id, idx: C.shuffle(x.opts.map((_, i) => i)) };
+      body = `<p class="drill-q">${esc(x.q)}</p><div class="opts">${R.order.idx.map((i, k) => `<button class="opt" data-i="${i}"><b>${'ABCD'[k]}</b><span>${esc(x.opts[i])}</span></button>`).join('')}</div>`;
+    }
+    view.innerHTML = `
+      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>第 ${R.i + 1} / ${R.list.length} 题</h1></div></section>
+      <div class="track" aria-hidden="true">${R.list.map((y, k) => `<i class="${k < R.i ? 'done' : k === R.i ? 'now' : ''}"></i>`).join('')}</div>
+      <section class="card drill">
+        <div class="meta"><span><span class="tag">${KIND[x.type]}</span>${x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ''}${isRetry ? ' <span class="tag amber">再来一次</span>' : ''}</span><button class="text-button" id="quit">结束这轮</button></div>
+        ${body}
+        <div id="verdict"></div>
+        <div class="actions"><span></span><span class="settings-actions"><button class="secondary-button" id="override" hidden>我写的也对，算对</button><button class="primary-button" id="check">${x.type === 'choice' ? '选一个' : '核对'}</button></span></div>
+      </section>`;
+    const inputs = [...view.querySelectorAll('#ans, .blank')];
+    if (inputs[0]) inputs[0].focus();
+    inputs.forEach((el, k) => el.onkeydown = (ev) => {
+      if (ev.key !== 'Enter' || ev.isComposing) return;
+      ev.preventDefault();
+      const nextEmpty = inputs.slice(k + 1).find((y) => !y.value.trim());
+      if (el.value.trim() && nextEmpty) return nextEmpty.focus();
+      check();
+    });
+    view.querySelectorAll('.opt').forEach((b) => b.onclick = () => { if (!R.shown) check(Number(b.dataset.i)); });
+    if (x.type === 'choice') $('check').disabled = true;
+    $('check').onclick = () => (R.shown ? next() : check());
+    $('quit').onclick = () => drillEnd(true);
+    $('override').onclick = () => {
+      if (R.first[x.id] === false && R.i === R.list.indexOf(x)) { state.drill[x.id] = R.prev[x.id]; if (!state.drill[x.id]) delete state.drill[x.id]; C.recordDrill(state, x.id, true); R.first[x.id] = true; }
+      if (R.retried[x.id] && R.list.lastIndexOf(x) > R.i) { R.list.splice(R.list.lastIndexOf(x), 1); delete R.retried[x.id]; }
+      save(); next();
+    };
+
+    function check(pick) {
+      if (R.shown) return;
+      const given = x.type === 'choice' ? pick : x.type === 'cloze' ? inputs.map((el) => el.value) : inputs[0].value;
+      if (x.type !== 'choice' && !(Array.isArray(given) ? given.some((g) => g.trim()) : String(given).trim())) return inputs[0].focus();
+      const res = C.checkAnswer(x, given);
+      R.shown = true;
+      const firstTime = !(x.id in R.first);
+      if (firstTime) { R.first[x.id] = res.ok; R.prev[x.id] = state.drill[x.id] ? { ...state.drill[x.id] } : null; C.recordDrill(state, x.id, res.ok); save(); }
+      if (!res.ok && !R.retried[x.id]) { R.retried[x.id] = true; R.list.push(x); }
+      inputs.forEach((el, k) => { el.disabled = true; if (res.per) el.classList.add(res.per[k] ? 'ok' : 'bad'); else el.classList.add(res.ok ? 'ok' : 'bad'); });
+      view.querySelectorAll('.opt').forEach((b) => { b.disabled = true; const i = Number(b.dataset.i); if (i === x.a) b.classList.add('right'); else if (i === pick) b.classList.add('wrong'); });
+      let extra = '';
+      if (x.type === 'chunk') { const a = C.alts(x.en); extra = `<b lang="en">${esc(a[0])}</b>${a.length > 1 ? `<br><span class="muted">也可以：<span lang="en">${a.slice(1).map(esc).join(' / ')}</span></span>` : ''}`; }
+      else if (x.type === 'cloze') extra = `<span lang="en">${esc(C.clozeParts(x.text).full)}</span>`;
+      else extra = esc(x.why || '');
+      $('verdict').innerHTML = `<div class="verdict ${res.ok ? '' : 'miss'}" style="margin-top:18px"><span class="ic">${res.ok ? '✓' : '×'}</span><div>${res.ok ? '对了' : x.type === 'choice' ? `正确答案：${esc(x.opts[x.a])}` : '正确答案'}${extra ? '<br>' + extra : ''}${!res.ok && R.retried[x.id] && R.list.lastIndexOf(x) > R.i ? '<br><span class="muted">这题本轮最后再出一次。</span>' : ''}</div></div>`;
+      $('override').hidden = res.ok || x.type === 'choice';
+      $('check').disabled = false;
+      $('check').textContent = R.i + 1 < R.list.length ? '下一题 →' : '看结果';
+      $('check').focus();
+    }
+    function next() { R.i += 1; R.shown = false; drawQuestion(); }
+  }
+
+  document.addEventListener('keydown', (ev) => {
+    const R = ui.drill;
+    if (!R || R.over || R.shown || !location.hash.startsWith('#drill') || ev.target.matches('input,textarea')) return;
+    const k = 'abcd'.indexOf(ev.key.toLowerCase()), n = '1234'.indexOf(ev.key);
+    const b = view.querySelectorAll('.opt')[k >= 0 ? k : n];
+    if (b) { ev.preventDefault(); b.click(); }
+  });
+
+  function drillEnd(quit) {
+    const R = ui.drill;
+    R.over = true;
+    const ids = Object.keys(R.first);
+    const wrong = R.list.filter((x, k) => R.list.indexOf(x) === k && R.first[x.id] === false);
+    const okN = ids.length - wrong.length;
+    view.innerHTML = `
+      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>${quit ? '这轮先到这里' : '这一轮做完了'}</h1></div></section>
+      <section class="card done-card">
+        <div class="done-mark"${wrong.length ? ' style="font-size:16px"' : ''}>${wrong.length ? okN + '/' + ids.length : '✓'}</div>
+        <h2>${ids.length ? `${okN} / ${ids.length} 一次答对` : '还没做题'}</h2>
+        ${wrong.length ? `<p>这些已经进了「错题」，下次优先出：</p><ol class="steals" style="text-align:left">${wrong.map((x) => `<li><span>${esc(x.type === 'chunk' ? x.zh : x.type === 'cloze' ? x.zh : x.q)}</span><span class="muted" lang="en">${esc(answerText(x))}</span></li>`).join('')}</ol>` : ids.length ? '<p>全对。连对两次的题算掌握，之后会少出。</p>' : ''}
+        <div class="actions" style="justify-content:center">${wrong.length ? `<button class="secondary-button" id="redo">只练这 ${wrong.length} 题</button>` : ''}<button class="secondary-button" id="home">换一组</button><button class="primary-button" id="again">再来一轮 →</button></div>
+      </section>`;
+    if ($('redo')) $('redo').onclick = () => startRound(R.source === 'wrong' ? 'all' : R.source, wrong.map((x) => x.id));
+    $('home').onclick = () => { history.replaceState(null, '', '#drill'); drillHome(R.source); };
+    $('again').onclick = () => startRound(R.source);
   }
 
   /* ---------- 速查 ---------- */

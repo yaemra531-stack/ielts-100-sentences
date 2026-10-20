@@ -182,3 +182,19 @@ dialog::backdrop{background:#1b2a2560}
 .steals li span[lang]{font-family:Georgia,serif;font-size:15px}
 .steals li .muted{font-size:12px}
 input[type=text]+label.label{margin-top:12px}
+/* 练习 */
+.drill .drill-zh{font-size:24px;font-weight:550;letter-spacing:-.3px;margin:22px 0 14px}
+.drill .drill-q{font-size:17px;line-height:1.7;margin:20px 0 14px}
+.drill .drill-sent{font-family:Georgia,"Times New Roman",serif;font-size:19px;line-height:2.3;margin:10px 0 0}
+.drill #ans{font-family:Georgia,"Times New Roman",serif;font-size:18px}
+input.blank{display:inline-block;margin:0 4px;padding:3px 8px;border-radius:7px;font-family:Georgia,"Times New Roman",serif;font-size:17px;max-width:100%}
+.drill input.ok{border-color:var(--green);background:var(--green-soft)}
+.drill input.bad{border-color:var(--red);background:var(--red-soft)}
+.opts{display:grid;gap:8px}
+.opt{display:flex;gap:12px;align-items:baseline;text-align:left;border:1px solid var(--line);border-radius:11px;padding:11px 14px;background:var(--card);font-size:14.5px;line-height:1.6}
+.opt b{font-size:12px;color:var(--muted);font-weight:600}
+.opt:hover:not(:disabled){border-color:#b9c8bd;background:var(--green-soft)}
+.opt:disabled{opacity:1;cursor:default}
+.opt.right{border-color:var(--green);background:var(--green-soft);color:var(--green)}
+.opt.wrong{border-color:var(--red);background:var(--red-soft);color:var(--red)}
+@media (max-width:640px){.drill .drill-zh{font-size:21px}.drill .drill-sent{font-size:17px}}

@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext({});
-for (const f of ['six-data.js', 'six-core.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx);
-const D = ctx.SIX_DATA, C = ctx.SixCore;
+for (const f of ['six-data.js', 'six-drills.js', 'six-core.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx);
+const D = ctx.SIX_DATA, C = ctx.SixCore, DR = ctx.SIX_DRILLS;
 
 function finish(s, ratings = { task: 2, ideas: 2, develop: 2, language: 2 }, extra = {}) {
   const it = C.currentItem(s);
@@ -118,4 +118,49 @@ test('提示词带英文题目、6–6.5 目标；模仿日注明是仿写；旧
   assert.equal(old.queue[0].phase, 'learn');
   assert.equal(old.settings.pdfOffset, 12);
   assert.equal(old.prompts, undefined);
+});
+
+test('练习：题库对应真实题目，答案格式能被核对', () => {
+  for (const [qid, pack] of Object.entries(DR.packs)) {
+    assert.ok(D.questions[qid], qid);
+    const ids = new Set();
+    for (const x of pack.items) {
+      assert.ok(!ids.has(x.id), `重复 id ${x.id}`); ids.add(x.id);
+      if (x.type === 'chunk') assert.ok(C.checkAnswer(x, C.alts(x.en)[0]).ok, x.id);
+      else if (x.type === 'cloze') { const c = C.clozeParts(x.text); assert.ok(c.blanks.length, x.id); assert.ok(C.checkAnswer(x, c.blanks.map((b) => b[0])).ok, x.id); }
+      else { assert.ok(x.opts[x.a] && x.why, x.id); assert.ok(C.checkAnswer(x, x.a).ok); assert.ok(!C.checkAnswer(x, (x.a + 1) % x.opts.length).ok); }
+    }
+  }
+});
+
+test('练习：宽松核对、自录词块、出题顺序与错题', () => {
+  const chunk = { id: 'k', type: 'chunk', en: 'travel to and from work / commute' };
+  assert.ok(C.checkAnswer(chunk, '  Commute. ').ok);
+  assert.ok(C.checkAnswer({ id: 'k2', type: 'chunk', en: 'low-income families' }, 'low income families').ok);
+  assert.ok(!C.checkAnswer(chunk, '').ok);
+  const cz = { id: 'z', type: 'cloze', text: 'If nobody {paid} tax, people {could} not afford it.' };
+  assert.deepEqual([...C.checkAnswer(cz, ['paid', 'can']).per], [true, false]);
+  assert.deepEqual([...C.parseChunks('1. 可支配收入 = disposable income\nfunction properly ＝ 正常运转\n没有等号的行\nfoo = bar').map((x) => x.en)], ['disposable income', 'function properly']);
+
+  const s = C.createState(D);
+  assert.equal(JSON.stringify(s.drill), '{}');
+  const it = C.currentItem(s);
+  C.entryFor(s, it).chunks = '税收收入 = tax revenue\n税收收入 = tax revenue\n经济增长 = economic growth';
+  const mine = C.drillItems(s, D, DR, 'mine');
+  assert.equal(mine.length, 2, '重复词块只算一次');
+  const pack = C.drillItems(s, D, DR, 'B2.2.9');
+  assert.equal(C.drillItems(s, D, DR, 'all').length, pack.length + 2);
+
+  C.recordDrill(s, pack[0].id, true); C.recordDrill(s, pack[0].id, true);
+  C.recordDrill(s, pack[1].id, false);
+  assert.deepEqual([...C.drillItems(s, D, DR, 'wrong').map((x) => x.id)], [pack[1].id]);
+  const round = C.buildRound(pack, s, 10, () => 0.5);
+  assert.equal(round.length, 10);
+  assert.equal(round[0].id, pack[1].id, '错题排最前');
+  assert.ok(!round.some((x) => x.id === pack[0].id), '已掌握的排在没做过的后面');
+  const st = C.drillStats(s, pack);
+  assert.equal(st.mastered, 1); assert.equal(st.wrong, 1); assert.equal(st.seen, 2);
+  C.recordDrill(s, pack[1].id, true);
+  assert.equal(C.drillItems(s, D, DR, 'wrong').length, 0, '答对后移出错题');
+  assert.equal(JSON.stringify(C.normalize({ ...s, drill: null }, D).drill), '{}');
 });
