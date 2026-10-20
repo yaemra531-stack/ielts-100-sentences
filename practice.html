@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f4f3ee">
+  <style>html{background:#f4f3ee;color-scheme:light}html[data-theme="dark"]{background:#181e1b;color-scheme:dark}</style>
+  <script>
+    (() => {
+      let choice;
+      try { choice = (JSON.parse(localStorage.getItem('ielts6.v1') || 'null') || {}).settings?.theme || localStorage.getItem('ielts100.theme.v1'); } catch {}
+      const dark = (['dark','light'].includes(choice) ? choice : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <meta name="description" content="每天一道雅思写作题：先写，再翻书对答案，用记录找出弱项。">
+  <title>每日一题 · 雅思写作 6–6.5</title>
+  <link rel="stylesheet" href="practice.css?v=1">
+  <script src="six-data.js?v=1" defer></script>
+  <script src="six-core.js?v=1" defer></script>
+  <script src="six-app.js?v=1" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <a class="brand" href="#today" aria-label="每日一题首页"><span class="brand-mark">题</span><span>每日一题<span class="brand-light"> / 以题推进</span></span></a>
+      <nav class="tabs" aria-label="页面">
+        <a href="#today" data-tab="today">今日</a>
+        <a href="#log" data-tab="log">记录</a>
+        <a href="#lookup" data-tab="lookup">速查</a>
+      </nav>
+      <div class="header-actions">
+        <a href="index.html" class="text-button page-link">100句</a><a href="chunks.html" class="text-button page-link">词伙</a>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="切换夜间模式"></button>
+        <button id="settings-open" class="icon-button" type="button" aria-label="设置" title="设置"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      </div>
+    </header>
+    <main id="view" aria-live="polite"></main>
+    <footer><span>记录只保存在这台设备的浏览器里，可在设置中导出。</span><span>页码对应《顾家北手把手教你雅思写作（6.0 版）》</span></footer>
+  </div>
+
+  <dialog id="settings">
+    <div class="dialog-heading"><h2>设置</h2><button class="icon-button" type="button" data-close aria-label="关闭">×</button></div>
+    <p class="dialog-note">页码按书页标注。你的 PDF 页码 = 书页 + 偏移。</p>
+    <div class="settings-section">
+      <h3>PDF 页码偏移</h3>
+      <label class="inline-field">书页 + <input id="pdf-offset" type="number" min="-50" max="80" step="1"> = PDF 页</label>
+    </div>
+    <div class="settings-section">
+      <h3>题目原文</h3>
+      <p>英文题目不放在公开网站上。导入你本机的「题目原文包」（JSON）后，题目会直接显示在页面里，AI 提示词也会自动带上题目。</p>
+      <div class="settings-actions"><label class="secondary-button file-label">导入题目原文包<input id="import-prompts" type="file" accept="application/json,.json"></label></div>
+    </div>
+    <div class="settings-section">
+      <h3>备份</h3>
+      <p>换设备或清缓存前先导出。</p>
+      <div class="settings-actions">
+        <button id="export" class="secondary-button" type="button">导出记录</button>
+        <label class="secondary-button file-label">导入记录<input id="import" type="file" accept="application/json,.json"></label>
+        <button id="reset" class="danger-button" type="button">清空重来</button>
+      </div>
+      <p id="settings-message" class="settings-message" role="status" hidden></p>
+    </div>
+  </dialog>
+</body>
+</html>
