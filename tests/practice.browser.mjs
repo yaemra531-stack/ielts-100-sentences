@@ -58,35 +58,41 @@ if (s.entries.L01.chunks.split('\n').length !== 2) fail('词块未保存');
 if (!(await p.textContent('#to-drill')).includes('做今天的练习')) fail('完成卡应有练习入口');
 await p.click('#to-drill'); await p.waitForTimeout(100);
 if (!p.url().endsWith('#drill/B2.2.9')) fail('应进入第 1 天练习');
-const solve = () => p.evaluate(() => {
-  const P = window.SIX_DRILLS.packs['B2.2.9'].items;
-  const zh = document.querySelector('.drill-zh'), q = document.querySelector('.drill-q'), h = document.querySelector('.drill .hint');
-  if (zh) return { type: 'chunk', val: [P.find((x) => x.type === 'chunk' && x.zh === zh.textContent).en.split(' / ')[0]] };
-  if (q) return { type: 'choice', a: P.find((x) => x.type === 'choice' && x.q === q.textContent).a };
-  const x = P.find((y) => y.type === 'cloze' && y.zh === h.textContent);
-  return { type: 'cloze', val: [...x.text.matchAll(/\{([^}]+)\}/g)].map((m) => m[1].split('/')[0]) };
-});
-let sawRetry = false, n = 0;
-for (; n < 30 && !(await p.isVisible('.done-card')); n++) {
-  const a = await solve(), wrong = n === 0;
-  if ((await p.textContent('.drill .meta')).includes('再来一次')) sawRetry = true;
-  if (a.type === 'choice') {
-    if (wrong) await p.click(`.opt:not([data-i="${a.a}"]) >> nth=0`); else await p.keyboard.press('ABCD'[await p.locator('.opt').evaluateAll((bs, i) => bs.findIndex((b) => Number(b.dataset.i) === i), a.a)].toLowerCase());
-  } else {
-    const ins = p.locator('#ans, .blank');
-    for (let k = 0; k < a.val.length; k++) await ins.nth(k).fill(wrong ? 'zzz' : a.val[k]);
-    await ins.nth(a.val.length - 1).press('Enter');
+const solve = (wrong) => p.evaluate((wrong) => {
+  const P = Object.values(window.SIX_DRILLS.packs).flatMap((x) => x.items);
+  const kind = document.querySelector('.drill').dataset.kind;
+  const q = document.querySelector('.drill-q')?.textContent, zh = document.querySelector('.drill-zh')?.textContent, h = document.querySelector('.drill .hint')?.textContent;
+  const click = (sel) => document.querySelector(sel).click();
+  if (kind === 'choice') { const x = P.find((y) => y.q === q); click(`.opt[data-i="${wrong ? (x.a + 1) % x.opts.length : x.a}"]`); }
+  else if (kind === 'pick') { const x = P.find((y) => y.type === 'chunk' && y.zh === zh); const right = x.en.split(' / ')[0]; [...document.querySelectorAll('.opt')].find((b) => wrong ? b.textContent.slice(1) !== right : b.textContent.slice(1) === right).click(); }
+  else if (kind === 'order') { const n = document.querySelectorAll('#pool .opt').length; if (wrong) click(`#pool .opt[data-i="${n - 1}"]`); for (let i = 0; i < n; i++) click(`#pool .opt[data-i="${i}"]`); }
+  else if (kind === 'match') { const n = document.querySelectorAll('#ml .opt').length; if (wrong) { click('#ml .opt[data-i="0"]'); click('#mr .opt[data-i="1"]'); } for (let i = 0; i < n; i++) { click(`#ml .opt[data-i="${i}"]`); click(`#mr .opt[data-i="${i}"]`); } }
+  else if (kind === 'bank') {
+    const x = P.find((y) => y.type === 'cloze' && y.zh === h);
+    const ans = [...x.text.matchAll(/\{([^}]+)\}/g)].map((m) => m[1].split('/')[0]);
+    const chips = [...document.querySelectorAll('#bank .chip')];
+    ans.forEach((w, i) => { const c = wrong && i === 0 ? chips.find((c) => c.textContent !== w && !c.disabled) : chips.find((c) => c.textContent === w && !c.disabled); c.click(); });
+    click('#check');
   }
+  return kind;
+}, wrong);
+let sawRetry = false, n = 0;
+const kinds = new Set();
+for (; n < 30 && !(await p.isVisible('.done-card')); n++) {
+  if ((await p.textContent('.drill .meta')).includes('再来一次')) sawRetry = true;
+  const k = await solve(n === 0);
+  kinds.add(k);
   await p.waitForSelector('.verdict');
   const miss = await p.isVisible('.verdict.miss');
-  if (miss !== wrong && !(n > 9 && !wrong && !miss)) fail(`第 ${n + 1} 题核对结果不对`);
+  if (miss !== (n === 0)) fail(`第 ${n + 1} 张（${k}）核对结果不对`);
   if (n === 0) await shot('20-drill-wrong');
-  await p.keyboard.press('Enter');
+  if (k === 'match' && !(await p.isVisible('.drill-q'))) fail('配对题应有说明');
+  await p.click('#check');
   await p.waitForTimeout(30);
 }
 if (!sawRetry) fail('做错的题应在本轮末再出一次');
-if (n !== 11) fail(`一轮应是 10 题 + 1 道重做，实际 ${n}`);
 if (!(await text()).includes('9 / 10 一次答对')) fail('结果页应统计一次答对');
+if ([...kinds].some((k) => k === 'type')) fail('简单模式不该要求拼写');
 await shot('21-drill-end');
 s = await st();
 if (Object.keys(s.drill).length !== 10 || Object.values(s.drill).filter((r) => r.bad && !r.streak).length !== 1) fail('练习记录不对');
@@ -94,6 +100,7 @@ await p.click('#home');
 if ((await p.textContent('#srcs .chip[data-v="wrong"]')).trim() !== '错题1') fail('错题应为 1');
 if ((await p.textContent('#srcs .chip[data-v="mine"]')).trim() !== '我的词块2') fail('我的词块应为 2');
 await p.click('#srcs .chip[data-v="mine"]');
+await p.click('#mode button[data-v="hard"]');
 await p.click('#go');
 if (!(await p.textContent('.drill-zh')).match(/税收收入|正常运转/)) fail('应出自己的词块');
 await p.fill('#ans', 'tax revenues');

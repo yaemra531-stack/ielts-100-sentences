@@ -300,8 +300,53 @@
       .sort((a, b) => a.r - b.r || a.t - b.t).slice(0, n).map((o) => o.x);
   }
 
+
+  /* 把一轮题变成卡片。简单模式：词块 3 个以上合成一张「中英配对」，零散的变「四选一」；句型填空变「点词填空」。
+   * 困难模式：词块和填空都要自己拼写。排序、配对、选择两种模式一样。 */
+  function cardFor(x, pool, mode, rng = Math.random) {
+    if (x.type === 'choice' || x.type === 'order') return { kind: x.type, items: [x] };
+    if (x.type === 'match') return { kind: 'match', items: [x], rows: x.pairs.map(([l, r], i) => ({ id: x.id, k: i, left: l, right: r })) };
+    if (mode === 'hard') return { kind: 'type', items: [x] };
+    if (x.type === 'chunk') {
+      const right = alts(x.en)[0];
+      const others = shuffle(pool.filter((y) => y.type === 'chunk' && y.id !== x.id).map((y) => alts(y.en)[0]).filter((e) => norm(e) !== norm(right)), rng);
+      const opts = shuffle([right, ...[...new Set(others)].slice(0, 3)], rng);
+      return { kind: 'pick', items: [x], opts, a: opts.indexOf(right) };
+    }
+    const { blanks } = clozeParts(x.text);
+    const mine = blanks.map((b) => b[0]);
+    const taken = new Set(mine.map(norm));
+    const extra = [];
+    shuffle(pool.filter((y) => y.type === 'cloze' && y.id !== x.id), rng).forEach((y) => clozeParts(y.text).blanks.forEach((b) => {
+      if (extra.length < Math.max(2, 5 - mine.length) && !taken.has(norm(b[0]))) { taken.add(norm(b[0])); extra.push(b[0]); }
+    }));
+    return { kind: 'bank', items: [x], bank: shuffle([...mine, ...extra], rng) };
+  }
+
+  function makeCards(round, pool, mode = 'easy', rng = Math.random) {
+    const chunks = mode === 'hard' ? [] : round.filter((x) => x.type === 'chunk');
+    const groups = [];
+    if (chunks.length >= 3) {
+      const g = Math.ceil(chunks.length / 5), size = Math.ceil(chunks.length / g);
+      for (let i = 0; i < chunks.length; i += size) groups.push(chunks.slice(i, i + size));
+      if (groups.length > 1 && groups[groups.length - 1].length < 3) { const last = groups.pop(); groups[groups.length - 1].push(...last); }
+    }
+    const inGroup = new Map();
+    groups.forEach((g) => g.forEach((x) => inGroup.set(x.id, g)));
+    const cards = [], placed = new Set();
+    round.forEach((x) => {
+      const g = inGroup.get(x.id);
+      if (!g) return cards.push(cardFor(x, pool, mode, rng));
+      if (placed.has(g)) return;
+      placed.add(g);
+      cards.push({ kind: 'match', items: g, rows: g.map((y) => ({ id: y.id, k: 0, left: y.zh, right: alts(y.en)[0] })) });
+    });
+    return cards;
+  }
+
   function checkAnswer(item, answer) {
     if (item.type === 'choice') return { ok: Number(answer) === item.a };
+    if (item.type === 'order') return { ok: Array.isArray(answer) && answer.length === item.steps.length && answer.every((v, i) => v === item.steps[i]) };
     if (item.type === 'cloze') {
       const { blanks } = clozeParts(item.text);
       const given = Array.isArray(answer) ? answer : [answer];
@@ -335,5 +380,5 @@
     return s;
   }
 
-  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf, norm, alts, parseChunks, clozeParts, drillItems, buildRound, checkAnswer, recordDrill, drillStats, shuffle };
+  root.SixCore = { STORAGE_KEY, PER_WEEK, createState, normalize, currentItem, resolve, questionsOf, entryFor, complete, pickRewrite, ratingScore, minutesFor, wordCount, phaseOf, phaseProgress, estimateFinish, stats, suggestWeak, applyReview, buildPrompt, exportJSON, importJSON, question, pdf, norm, alts, parseChunks, clozeParts, drillItems, buildRound, checkAnswer, recordDrill, drillStats, shuffle, cardFor, makeCards };
 })(typeof window !== 'undefined' ? window : globalThis);

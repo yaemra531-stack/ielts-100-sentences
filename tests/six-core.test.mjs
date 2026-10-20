@@ -128,7 +128,9 @@ test('练习：题库对应真实题目，答案格式能被核对', () => {
       assert.ok(!ids.has(x.id), `重复 id ${x.id}`); ids.add(x.id);
       if (x.type === 'chunk') assert.ok(C.checkAnswer(x, C.alts(x.en)[0]).ok, x.id);
       else if (x.type === 'cloze') { const c = C.clozeParts(x.text); assert.ok(c.blanks.length, x.id); assert.ok(C.checkAnswer(x, c.blanks.map((b) => b[0])).ok, x.id); }
-      else { assert.ok(x.opts[x.a] && x.why, x.id); assert.ok(C.checkAnswer(x, x.a).ok); assert.ok(!C.checkAnswer(x, (x.a + 1) % x.opts.length).ok); }
+      else if (x.type === 'order') { assert.ok(x.steps.length >= 3 && x.q, x.id); assert.ok(C.checkAnswer(x, [...x.steps]).ok); assert.ok(!C.checkAnswer(x, [...x.steps].reverse()).ok); }
+      else if (x.type === 'match') { assert.ok(x.pairs.length >= 3 && x.q, x.id); assert.equal(new Set(x.pairs.map((p) => p[1])).size, x.pairs.length, `${x.id} 右栏重复`); }
+      else { assert.equal(x.type, 'choice', x.id); assert.ok(x.opts[x.a] && x.why, x.id); assert.ok(C.checkAnswer(x, x.a).ok); assert.ok(!C.checkAnswer(x, (x.a + 1) % x.opts.length).ok); }
     }
   }
 });
@@ -163,4 +165,27 @@ test('练习：宽松核对、自录词块、出题顺序与错题', () => {
   C.recordDrill(s, pack[1].id, true);
   assert.equal(C.drillItems(s, D, DR, 'wrong').length, 0, '答对后移出错题');
   assert.equal(JSON.stringify(C.normalize({ ...s, drill: null }, D).drill), '{}');
+});
+
+test('练习：简单模式把词块合成配对、填空变点词；进阶模式要拼写', () => {
+  const s = C.createState(D);
+  const pool = C.drillItems(s, D, DR, 'B2.2.9');
+  const chunks = pool.filter((x) => x.type === 'chunk');
+  const cloze = pool.find((x) => x.type === 'cloze');
+  const round = [...chunks.slice(0, 7), cloze, pool.find((x) => x.type === 'order'), pool.find((x) => x.type === 'match')];
+  const easy = C.makeCards(round, pool, 'easy', () => 0.3);
+  const kinds = easy.map((c) => c.kind);
+  assert.equal(kinds.filter((k) => k === 'match').length, 3, '7 个词块 → 2 张配对 + 1 张题库配对');
+  assert.ok(easy.filter((c) => c.kind === 'match' && c.items[0].type === 'chunk').every((c) => c.rows.length >= 3 && c.rows.length <= 5));
+  assert.equal(easy.flatMap((c) => c.items).length, 10, '每道题都在卡片里');
+  const bank = easy.find((c) => c.kind === 'bank');
+  for (const b of C.clozeParts(cloze.text).blanks) assert.ok(bank.bank.includes(b[0]), '词库包含正确答案');
+  assert.ok(bank.bank.length > C.clozeParts(cloze.text).blanks.length, '词库有干扰项');
+  const pick = C.cardFor(chunks[0], pool, 'easy', () => 0.3);
+  assert.equal(pick.kind, 'pick'); assert.equal(pick.opts.length, 4); assert.equal(pick.opts[pick.a], C.alts(chunks[0].en)[0]);
+  assert.equal(new Set(pick.opts).size, 4);
+  assert.deepEqual([...C.makeCards(chunks.slice(0, 2), pool, 'easy').map((c) => c.kind)], ['pick', 'pick'], '不到 3 个词块不配对');
+  const hard = C.makeCards(round, pool, 'hard');
+  assert.equal(hard.filter((c) => c.kind === 'type').length, 8);
+  assert.ok(hard.some((c) => c.kind === 'order') && hard.some((c) => c.kind === 'match'));
 });

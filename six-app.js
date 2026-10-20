@@ -553,9 +553,12 @@
       <section class="card"><h2 class="sec">写过的题</h2>${done.length ? done.map(item).join('') : '<p class="muted">还没有完成的题。去「今日」写第一题。</p>'}</section>`;
   }
 
-  /* ---------- 练习（词块默写 / 句型填空 / 选择题） ---------- */
+  /* ---------- 练习（配对 / 选择 / 排序 / 点词填空；进阶模式自己拼写） ---------- */
   const DR = window.SIX_DRILLS || { packs: {} };
-  const KIND = { chunk: '词块默写', cloze: '句型填空', choice: '选择' };
+  const KIND = { chunk: '词块', cloze: '句型填空', choice: '选择', order: '排序', match: '配对' };
+  const CARD = { match: '配对', pick: '词块 · 四选一', bank: '点词填空', choice: '选择', order: '排序' };
+  const MODE = [['easy', '简单：选择 / 配对 / 排序'], ['hard', '进阶：自己拼写']];
+  const drillMode = () => (state.settings.drillMode === 'hard' ? 'hard' : 'easy');
 
   function drillSources() {
     const packs = Object.entries(DR.packs).map(([id, p]) => ({ id, label: p.title }));
@@ -563,12 +566,14 @@
       .map((x) => ({ ...x, items: C.drillItems(state, D, DR, x.id) }));
   }
   const srcLabel = (id) => (DR.packs[id] ? DR.packs[id].title : { mine: '我的词块', wrong: '错题', all: '全部' }[id] || id);
-  const answerText = (x) => x.type === 'chunk' ? C.alts(x.en)[0] : x.type === 'cloze' ? C.clozeParts(x.text).full : x.opts[x.a];
+  const promptText = (x) => x.type === 'chunk' || x.type === 'cloze' ? x.zh : x.q;
+  const answerText = (x) => x.type === 'chunk' ? C.alts(x.en)[0] : x.type === 'cloze' ? C.clozeParts(x.text).full
+    : x.type === 'order' ? x.steps.join(' → ') : x.type === 'match' ? x.pairs.map((p) => p.join(' = ')).join('；') : x.opts[x.a];
 
   function renderDrill(arg) {
     const valid = (id) => DR.packs[id] || ['mine', 'wrong', 'all'].includes(id);
     if (arg && valid(arg) && (!ui.drill || ui.drill.source !== arg || ui.drill.over)) return startRound(arg);
-    if (ui.drill && !ui.drill.over) return drawQuestion();
+    if (ui.drill && !ui.drill.over) return drawCard();
     drillHome(ui.drillSrc || Object.keys(DR.packs)[0] || 'mine');
   }
 
@@ -581,7 +586,7 @@
     const kinds = Object.keys(KIND).map((k) => [k, cur.items.filter((x) => x.type === k).length]).filter(([, n]) => n);
     view.innerHTML = `
       <section class="intro">
-        <div><p class="eyebrow">Drill</p><h1>练习</h1><p class="intro-note">做完一天的题，把读题、ABC、句型和词块练熟。每轮 10 题，约 5 分钟。</p></div>
+        <div><p class="eyebrow">Drill</p><h1>练习</h1><p class="intro-note">做完一天的题，用配对、选择、排序把读题、ABC、句型和词块练熟。每轮约 5 分钟。</p></div>
         <div class="stats">
           <div><span class="stat-num">${st.total}</span><span class="stat-label">题库</span></div>
           <div><span class="stat-num">${st.mastered}</span><span class="stat-label">已掌握（连对 2 次）</span></div>
@@ -593,10 +598,14 @@
         <div class="chips" id="srcs">${srcs.map((x) => `<button class="chip" data-v="${esc(x.id)}" aria-pressed="${x.id === cur.id}">${esc(x.label)}<small>${x.items.length}</small></button>`).join('')}</div>
         <p class="hint">${kinds.length ? kinds.map(([k, n]) => `${KIND[k]} ${n}`).join(' · ') : cur.id === 'mine' ? '还没有自己的词块：在模仿日「对照」一步，按「中文 = English」一行一个记下来。' : cur.id === 'wrong' ? '没有错题 👍' : '这里还没有题。'}</p>
         ${DR.packs[cur.id]?.note ? `<p class="hint" lang="en">${esc(DR.packs[cur.id].note)}</p>` : ''}
-        <div class="actions"><span class="hint" style="margin:0">回车 = 核对 / 下一题。错的题本轮最后再出一次。</span><button class="primary-button" id="go" ${cur.items.length ? '' : 'disabled'}>开始一轮（${Math.min(10, cur.items.length)} 题）→</button></div>
+        <span class="label">难度</span>
+        <div class="seg" id="mode">${MODE.map(([v, l]) => `<button data-v="${v}" aria-pressed="${drillMode() === v}">${l}</button>`).join('')}</div>
+        <p class="hint">${drillMode() === 'hard' ? '词块看中文写英文，句型自己填空。拼写对了才算对。' : '词块变成中英配对和四选一，句型从词库里点词填空。先认得，再练拼写。'}</p>
+        <div class="actions"><span class="hint" style="margin:0">做错的题本轮最后再出一次。</span><button class="primary-button" id="go" ${cur.items.length ? '' : 'disabled'}>开始一轮 →</button></div>
         ${mine.length ? `<details class="peek"><summary>我的词块（${mine.length}）</summary><ul class="hint">${mine.map((x) => `<li>${esc(x.zh)} = <span lang="en">${esc(x.en)}</span>${x.from ? ` <span class="muted">· ${esc(x.from)}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
       </section>`;
     view.querySelectorAll('#srcs .chip').forEach((b) => b.onclick = () => drillHome(b.dataset.v));
+    view.querySelectorAll('#mode button').forEach((b) => b.onclick = () => { state.settings.drillMode = b.dataset.v; save(); drillHome(cur.id); });
     $('go').onclick = () => startRound(cur.id);
   }
 
@@ -605,80 +614,164 @@
     if (onlyIds) items = items.filter((x) => onlyIds.includes(x.id));
     const round = onlyIds ? C.shuffle(items) : C.buildRound(items, state, 10);
     if (!round.length) return drillHome(source);
+    const pool = C.drillItems(state, D, DR, 'all');
     ui.drillSrc = source;
-    ui.drill = { source, list: round, i: 0, shown: false, first: {}, retried: {}, prev: {}, over: false };
+    ui.drill = { source, pool, mode: drillMode(), cards: C.makeCards(round, pool, drillMode()), i: 0, shown: false, first: {}, retried: {}, prev: {}, over: false };
     if (location.hash !== '#drill/' + source) history.replaceState(null, '', '#drill/' + source);
-    drawQuestion();
+    drawCard();
   }
 
-  function drawQuestion() {
-    const R = ui.drill, x = R.list[R.i];
-    if (!x) return drillEnd();
-    const isRetry = R.list.indexOf(x) !== R.i;
+  const optBtns = (labels, order) => `<div class="opts">${order.map((i, k) => `<button class="opt" data-i="${i}"><b>${'ABCD'[k]}</b><span>${esc(labels[i])}</span></button>`).join('')}</div>`;
+
+  function drawCard() {
+    const R = ui.drill, card = R.cards[R.i];
+    if (!card) return drillEnd();
+    const x = card.items[0];
+    const kind = card.kind === 'type' ? (x.type === 'chunk' ? '词块默写' : '句型填空') : CARD[card.kind];
     let body = '';
-    if (x.type === 'chunk') body = `<p class="drill-zh">${esc(x.zh)}</p><input type="text" id="ans" lang="en" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="英文">`;
-    else if (x.type === 'cloze') {
+    if (card.kind === 'choice') { card.order = card.order || C.shuffle(x.opts.map((_, i) => i)); body = `<p class="drill-q">${esc(x.q)}</p>${optBtns(x.opts, card.order)}`; }
+    else if (card.kind === 'pick') body = `<p class="drill-zh">${esc(x.zh)}</p>${optBtns(card.opts, card.opts.map((_, i) => i))}`;
+    else if (card.kind === 'order') {
+      card.mix = card.mix || C.shuffle(x.steps.map((_, i) => i));
+      body = `<p class="drill-q">${esc(x.q)}</p><ol class="seq" id="seq"></ol><div class="opts" id="pool">${card.mix.map((i) => `<button class="opt" data-i="${i}"><span>${esc(x.steps[i])}</span></button>`).join('')}</div>`;
+    } else if (card.kind === 'match') {
+      card.mix = card.mix || C.shuffle(card.rows.map((_, i) => i));
+      body = `<p class="drill-q">${esc(x.type === 'match' ? x.q : '把中文和英文配成对：先点左边，再点右边')}</p>
+        <div class="match"><div class="col" id="ml">${card.rows.map((r, i) => `<button class="opt" data-i="${i}"><span>${esc(r.left)}</span></button>`).join('')}</div>
+        <div class="col" id="mr">${card.mix.map((i) => `<button class="opt" data-i="${i}" lang="en"><span>${esc(card.rows[i].right)}</span></button>`).join('')}</div></div>`;
+    } else if (card.kind === 'bank') {
+      const { parts, blanks } = C.clozeParts(x.text);
+      body = `<p class="hint" style="font-size:14px">${esc(x.zh)}</p><p class="drill-sent" lang="en">${parts.map((p, i) => esc(p) + (blanks[i] ? `<button class="slot" data-i="${i}" aria-label="第 ${i + 1} 空"></button>` : '')).join('')}</p>
+        <div class="chips bank" id="bank">${card.bank.map((w, k) => `<button class="chip" data-k="${k}" lang="en">${esc(w)}</button>`).join('')}</div>`;
+    } else if (x.type === 'chunk') body = `<p class="drill-zh">${esc(x.zh)}</p><input type="text" id="ans" lang="en" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="英文">`;
+    else {
       const { parts, blanks } = C.clozeParts(x.text);
       body = `<p class="hint" style="font-size:14px">${esc(x.zh)}</p><p class="drill-sent" lang="en">${parts.map((p, i) => esc(p) + (blanks[i] ? `<input type="text" class="blank" data-i="${i}" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:${Math.max(5, blanks[i][0].length + 3)}ch" aria-label="第 ${i + 1} 空">` : '')).join('')}</p>`;
-    } else {
-      R.order = R.order && R.order.id === x.id ? R.order : { id: x.id, idx: C.shuffle(x.opts.map((_, i) => i)) };
-      body = `<p class="drill-q">${esc(x.q)}</p><div class="opts">${R.order.idx.map((i, k) => `<button class="opt" data-i="${i}"><b>${'ABCD'[k]}</b><span>${esc(x.opts[i])}</span></button>`).join('')}</div>`;
     }
+    const needsBtn = ['bank', 'type'].includes(card.kind);
     view.innerHTML = `
-      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>第 ${R.i + 1} / ${R.list.length} 题</h1></div></section>
-      <div class="track" aria-hidden="true">${R.list.map((y, k) => `<i class="${k < R.i ? 'done' : k === R.i ? 'now' : ''}"></i>`).join('')}</div>
-      <section class="card drill">
-        <div class="meta"><span><span class="tag">${KIND[x.type]}</span>${x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ''}${isRetry ? ' <span class="tag amber">再来一次</span>' : ''}</span><button class="text-button" id="quit">结束这轮</button></div>
+      <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>第 ${R.i + 1} / ${R.cards.length} 题</h1></div></section>
+      <div class="track" aria-hidden="true">${R.cards.map((y, k) => `<i class="${k < R.i ? 'done' : k === R.i ? 'now' : ''}"></i>`).join('')}</div>
+      <section class="card drill" data-kind="${card.kind}">
+        <div class="meta"><span><span class="tag">${kind}</span>${card.items.length === 1 && x.tag ? ` <span class="tag">${esc(x.tag)}</span>` : ''}${card.retry ? ' <span class="tag amber">再来一次</span>' : ''}</span><button class="text-button" id="quit">结束这轮</button></div>
         ${body}
         <div id="verdict"></div>
-        <div class="actions"><span></span><span class="settings-actions"><button class="secondary-button" id="override" hidden>我写的也对，算对</button><button class="primary-button" id="check">${x.type === 'choice' ? '选一个' : '核对'}</button></span></div>
+        <div class="actions"><span></span><span class="settings-actions"><button class="secondary-button" id="override" hidden>我写的也对，算对</button><button class="primary-button" id="check" ${needsBtn ? '' : 'hidden'}>核对</button></span></div>
       </section>`;
-    const inputs = [...view.querySelectorAll('#ans, .blank')];
-    if (inputs[0]) inputs[0].focus();
-    inputs.forEach((el, k) => el.onkeydown = (ev) => {
-      if (ev.key !== 'Enter' || ev.isComposing) return;
-      ev.preventDefault();
-      const nextEmpty = inputs.slice(k + 1).find((y) => !y.value.trim());
-      if (el.value.trim() && nextEmpty) return nextEmpty.focus();
-      check();
-    });
-    view.querySelectorAll('.opt').forEach((b) => b.onclick = () => { if (!R.shown) check(Number(b.dataset.i)); });
-    if (x.type === 'choice') $('check').disabled = true;
-    $('check').onclick = () => (R.shown ? next() : check());
     $('quit').onclick = () => drillEnd(true);
-    $('override').onclick = () => {
-      if (R.first[x.id] === false && R.i === R.list.indexOf(x)) { state.drill[x.id] = R.prev[x.id]; if (!state.drill[x.id]) delete state.drill[x.id]; C.recordDrill(state, x.id, true); R.first[x.id] = true; }
-      if (R.retried[x.id] && R.list.lastIndexOf(x) > R.i) { R.list.splice(R.list.lastIndexOf(x), 1); delete R.retried[x.id]; }
-      save(); next();
-    };
+    $('check').onclick = () => (R.shown ? next() : check && check());
+    let check = null;
 
-    function check(pick) {
-      if (R.shown) return;
-      const given = x.type === 'choice' ? pick : x.type === 'cloze' ? inputs.map((el) => el.value) : inputs[0].value;
-      if (x.type !== 'choice' && !(Array.isArray(given) ? given.some((g) => g.trim()) : String(given).trim())) return inputs[0].focus();
-      const res = C.checkAnswer(x, given);
+    const finish = (res, extra) => {
       R.shown = true;
-      const firstTime = !(x.id in R.first);
-      if (firstTime) { R.first[x.id] = res.ok; R.prev[x.id] = state.drill[x.id] ? { ...state.drill[x.id] } : null; C.recordDrill(state, x.id, res.ok); save(); }
-      if (!res.ok && !R.retried[x.id]) { R.retried[x.id] = true; R.list.push(x); }
-      inputs.forEach((el, k) => { el.disabled = true; if (res.per) el.classList.add(res.per[k] ? 'ok' : 'bad'); else el.classList.add(res.ok ? 'ok' : 'bad'); });
-      view.querySelectorAll('.opt').forEach((b) => { b.disabled = true; const i = Number(b.dataset.i); if (i === x.a) b.classList.add('right'); else if (i === pick) b.classList.add('wrong'); });
-      let extra = '';
-      if (x.type === 'chunk') { const a = C.alts(x.en); extra = `<b lang="en">${esc(a[0])}</b>${a.length > 1 ? `<br><span class="muted">也可以：<span lang="en">${a.slice(1).map(esc).join(' / ')}</span></span>` : ''}`; }
-      else if (x.type === 'cloze') extra = `<span lang="en">${esc(C.clozeParts(x.text).full)}</span>`;
-      else extra = esc(x.why || '');
-      $('verdict').innerHTML = `<div class="verdict ${res.ok ? '' : 'miss'}" style="margin-top:18px"><span class="ic">${res.ok ? '✓' : '×'}</span><div>${res.ok ? '对了' : x.type === 'choice' ? `正确答案：${esc(x.opts[x.a])}` : '正确答案'}${extra ? '<br>' + extra : ''}${!res.ok && R.retried[x.id] && R.list.lastIndexOf(x) > R.i ? '<br><span class="muted">这题本轮最后再出一次。</span>' : ''}</div></div>`;
-      $('override').hidden = res.ok || x.type === 'choice';
-      $('check').disabled = false;
-      $('check').textContent = R.i + 1 < R.list.length ? '下一题 →' : '看结果';
+      Object.entries(res).forEach(([id, ok]) => {
+        const item = card.items.find((y) => y.id === id);
+        if (!(id in R.first)) { R.first[id] = ok; R.prev[id] = state.drill[id] ? { ...state.drill[id] } : null; C.recordDrill(state, id, ok); }
+        if (!ok && !R.retried[id]) { R.retried[id] = true; R.cards.push({ ...C.cardFor(item, R.pool, R.mode), retry: true }); }
+      });
+      save();
+      const bad = Object.values(res).filter((v) => !v).length;
+      const head = !bad ? '对了' : card.items.length > 1 ? `错了 ${bad} 个，本轮最后再练一次` : '再看一眼正确答案';
+      $('verdict').innerHTML = `<div class="verdict ${bad ? 'miss' : ''}" style="margin-top:18px"><span class="ic">${bad ? '×' : '✓'}</span><div>${head}${extra ? '<br>' + extra : ''}</div></div>`;
+      $('check').hidden = false; $('check').disabled = false;
+      $('check').textContent = R.i + 1 < R.cards.length ? '下一题 →' : '看结果';
       $('check').focus();
+    };
+    function next() { R.i += 1; R.shown = false; drawCard(); }
+
+    if (card.kind === 'choice' || card.kind === 'pick') {
+      const a = card.kind === 'choice' ? x.a : card.a;
+      view.querySelectorAll('.opt').forEach((b) => b.onclick = () => {
+        if (R.shown) return;
+        const pick = Number(b.dataset.i);
+        view.querySelectorAll('.opt').forEach((y) => { y.disabled = true; const i = Number(y.dataset.i); if (i === a) y.classList.add('right'); else if (i === pick) y.classList.add('wrong'); });
+        finish({ [x.id]: pick === a }, card.kind === 'choice' ? esc(x.why || '') : pick === a ? '' : `<span lang="en">${esc(card.opts[a])}</span>`);
+      });
+    } else if (card.kind === 'order') {
+      let at = 0, miss = 0;
+      view.querySelectorAll('#pool .opt').forEach((b) => b.onclick = () => {
+        if (R.shown) return;
+        const i = Number(b.dataset.i);
+        if (i !== at) { miss += 1; flash(b); return; }
+        at += 1; b.remove();
+        $('seq').insertAdjacentHTML('beforeend', `<li>${esc(x.steps[i])}</li>`);
+        if (at === x.steps.length) finish({ [x.id]: miss === 0 }, (miss ? `点错 ${miss} 次。` : '') + esc(x.why || ''));
+      });
+    } else if (card.kind === 'match') {
+      let sel = null, left = card.rows.length;
+      const bad = {};
+      const tryPair = () => {
+        if (!sel || sel.l == null || sel.r == null) return;
+        const lb = view.querySelector(`#ml .opt[data-i="${sel.l}"]`), rb = view.querySelector(`#mr .opt[data-i="${sel.r}"]`);
+        lb.classList.remove('sel'); rb.classList.remove('sel');
+        const row = card.rows[sel.l];
+        if (sel.l === sel.r || norm2(card.rows[sel.r].right) === norm2(row.right) && card.rows[sel.r].left === row.left) {
+          lb.classList.add('right'); rb.classList.add('right'); lb.disabled = rb.disabled = true; left -= 1;
+        } else { bad[row.id] = true; flash(lb); flash(rb); }
+        sel = null;
+        if (!left) {
+          const res = {}; card.items.forEach((y) => (res[y.id] = !bad[y.id]));
+          const wrongRows = card.rows.filter((r) => bad[r.id]);
+          finish(res, (x.type === 'match' ? esc(x.why || '') : wrongRows.map((r) => `${esc(r.left)} = <span lang="en">${esc(r.right)}</span>`).join('<br>')));
+        }
+      };
+      const pickSide = (side, b) => {
+        if (R.shown || b.disabled) return;
+        sel = sel || {};
+        view.querySelectorAll(`#m${side} .opt`).forEach((y) => y.classList.remove('sel'));
+        sel[side] = Number(b.dataset.i); b.classList.add('sel');
+        tryPair();
+      };
+      view.querySelectorAll('#ml .opt').forEach((b) => b.onclick = () => pickSide('l', b));
+      view.querySelectorAll('#mr .opt').forEach((b) => b.onclick = () => pickSide('r', b));
+    } else if (card.kind === 'bank') {
+      const slots = [...view.querySelectorAll('.slot')], fill = slots.map(() => null);
+      const sync = () => { slots.forEach((s, i) => { s.textContent = fill[i] == null ? '' : card.bank[fill[i]]; s.classList.toggle('filled', fill[i] != null); });
+        view.querySelectorAll('#bank .chip').forEach((c) => (c.disabled = fill.includes(Number(c.dataset.k)))); $('check').disabled = fill.includes(null); };
+      view.querySelectorAll('#bank .chip').forEach((c) => c.onclick = () => { if (R.shown) return; const i = fill.indexOf(null); if (i >= 0) { fill[i] = Number(c.dataset.k); sync(); } });
+      slots.forEach((s, i) => s.onclick = () => { if (R.shown) return; fill[i] = null; sync(); });
+      sync();
+      check = () => {
+        const res = C.checkAnswer(x, fill.map((k) => card.bank[k]));
+        slots.forEach((s, i) => { s.disabled = true; s.classList.add(res.per[i] ? 'ok' : 'bad'); });
+        view.querySelectorAll('#bank .chip').forEach((c) => (c.disabled = true));
+        finish({ [x.id]: res.ok }, `<span lang="en">${esc(C.clozeParts(x.text).full)}</span>`);
+      };
+    } else {
+      const inputs = [...view.querySelectorAll('#ans, .blank')];
+      inputs[0].focus();
+      inputs.forEach((el, k) => el.onkeydown = (ev) => {
+        if (ev.key !== 'Enter' || ev.isComposing) return;
+        ev.preventDefault();
+        const nextEmpty = inputs.slice(k + 1).find((y) => !y.value.trim());
+        if (el.value.trim() && nextEmpty) return nextEmpty.focus();
+        check();
+      });
+      check = () => {
+        const given = x.type === 'cloze' ? inputs.map((el) => el.value) : inputs[0].value;
+        if (!(Array.isArray(given) ? given.some((g) => g.trim()) : given.trim())) return inputs[0].focus();
+        const res = C.checkAnswer(x, given);
+        inputs.forEach((el, k) => { el.disabled = true; el.classList.add((res.per ? res.per[k] : res.ok) ? 'ok' : 'bad'); });
+        const a = x.type === 'chunk' ? C.alts(x.en) : null;
+        finish({ [x.id]: res.ok }, a ? `<b lang="en">${esc(a[0])}</b>${a.length > 1 ? `<br><span class="muted">也可以：<span lang="en">${a.slice(1).map(esc).join(' / ')}</span></span>` : ''}` : `<span lang="en">${esc(C.clozeParts(x.text).full)}</span>`);
+        $('override').hidden = res.ok;
+      };
+      $('override').onclick = () => {
+        if (R.first[x.id] === false && !card.retry) { state.drill[x.id] = R.prev[x.id]; if (!state.drill[x.id]) delete state.drill[x.id]; C.recordDrill(state, x.id, true); R.first[x.id] = true; }
+        const k = R.cards.findIndex((c, j) => j > R.i && c.retry && c.items[0].id === x.id);
+        if (k > 0) { R.cards.splice(k, 1); delete R.retried[x.id]; }
+        save(); next();
+      };
     }
-    function next() { R.i += 1; R.shown = false; drawQuestion(); }
   }
+  const norm2 = (t) => C.norm(t);
+  function flash(b) { b.classList.add('wrong'); setTimeout(() => b.classList.remove('wrong'), 450); }
 
   document.addEventListener('keydown', (ev) => {
     const R = ui.drill;
     if (!R || R.over || R.shown || !location.hash.startsWith('#drill') || ev.target.matches('input,textarea')) return;
+    const kind = R.cards[R.i] && R.cards[R.i].kind;
+    if (kind !== 'choice' && kind !== 'pick') return;
     const k = 'abcd'.indexOf(ev.key.toLowerCase()), n = '1234'.indexOf(ev.key);
     const b = view.querySelectorAll('.opt')[k >= 0 ? k : n];
     if (b) { ev.preventDefault(); b.click(); }
@@ -687,16 +780,17 @@
   function drillEnd(quit) {
     const R = ui.drill;
     R.over = true;
+    const all = R.cards.flatMap((c) => c.items);
     const ids = Object.keys(R.first);
-    const wrong = R.list.filter((x, k) => R.list.indexOf(x) === k && R.first[x.id] === false);
+    const wrong = all.filter((x, k) => all.findIndex((y) => y.id === x.id) === k && R.first[x.id] === false);
     const okN = ids.length - wrong.length;
     view.innerHTML = `
       <section class="intro"><div><p class="eyebrow">Drill · ${esc(srcLabel(R.source))}</p><h1>${quit ? '这轮先到这里' : '这一轮做完了'}</h1></div></section>
       <section class="card done-card">
         <div class="done-mark"${wrong.length ? ' style="font-size:16px"' : ''}>${wrong.length ? okN + '/' + ids.length : '✓'}</div>
         <h2>${ids.length ? `${okN} / ${ids.length} 一次答对` : '还没做题'}</h2>
-        ${wrong.length ? `<p>这些已经进了「错题」，下次优先出：</p><ol class="steals" style="text-align:left">${wrong.map((x) => `<li><span>${esc(x.type === 'chunk' ? x.zh : x.type === 'cloze' ? x.zh : x.q)}</span><span class="muted" lang="en">${esc(answerText(x))}</span></li>`).join('')}</ol>` : ids.length ? '<p>全对。连对两次的题算掌握，之后会少出。</p>' : ''}
-        <div class="actions" style="justify-content:center">${wrong.length ? `<button class="secondary-button" id="redo">只练这 ${wrong.length} 题</button>` : ''}<button class="secondary-button" id="home">换一组</button><button class="primary-button" id="again">再来一轮 →</button></div>
+        ${wrong.length ? `<p>这些已经进了「错题」，下次优先出：</p><ol class="steals" style="text-align:left">${wrong.map((x) => `<li><span>${esc(promptText(x))}</span><span class="muted" lang="en">${esc(answerText(x))}</span></li>`).join('')}</ol>` : ids.length ? '<p>全对。连对两次的题算掌握，之后会少出。</p>' : ''}
+        <div class="actions" style="justify-content:center">${wrong.length ? `<button class="secondary-button" id="redo">只练这 ${wrong.length} 题</button>` : ''}<button class="secondary-button" id="home">换一组 / 换难度</button><button class="primary-button" id="again">再来一轮 →</button></div>
       </section>`;
     if ($('redo')) $('redo').onclick = () => startRound(R.source === 'wrong' ? 'all' : R.source, wrong.map((x) => x.id));
     $('home').onclick = () => { history.replaceState(null, '', '#drill'); drillHome(R.source); };

@@ -4,12 +4,17 @@
  *   chunk  中文 → 英文词块默写；en 用 " / " 分隔多个可接受答案（第一个是标准答案）
  *   cloze  句型填空；text 里用 {答案} 标空，空内用 "/" 分隔备选
  *   choice 选择题；a 为正确选项下标，why 为解析
+ *   order  排序题；steps 按正确顺序写，页面打乱后让你按顺序点
+ *   match  配对题；pairs 为 [左, 右]，页面打乱右栏后让你连线
+ * 简单模式下，词块默写会变成「中英配对」或「四选一」，句型填空会变成「点词填空」。
  */
 (function (root) {
   'use strict';
   const c = (id, zh, en) => ({ id, type: 'chunk', zh, en });
   const z = (id, zh, text) => ({ id, type: 'cloze', zh, text });
   const q = (id, tag, stem, opts, a, why) => ({ id, type: 'choice', tag, q: stem, opts, a, why });
+  const o = (id, tag, stem, steps, why) => ({ id, type: 'order', tag, q: stem, steps, why });
+  const m = (id, tag, stem, pairs, why) => ({ id, type: 'match', tag, q: stem, pairs, why });
 
   root.SIX_DRILLS = {
     packs: {
@@ -21,7 +26,6 @@
           q('t1-keep', '读题', '题目里 keep all the money they earn 的 keep 是什么意思？', ['留着、自己拿着（挣的钱）', '保持', '坚持', '继续做'], 0, '常见词别只记第一义：keep 在这里是「留着」，keep all the money they earn = 挣的钱全留着。'),
           q('t1-state', '读题', 'pay tax to the state 里的 state 指什么？', ['国家（政府）', '状态', '美国的州', '陈述'], 0, 'state 作名词常指「国家」。整句是「不向国家交税」，不是「交税」以外的别的事。'),
           q('t1-all', '读题', '哪组词决定了这题讨论的是「一分税都不交」，而不是「少交点税」？', ['all the money … not pay any tax', 'some people believe', 'should be able to', 'they earn'], 0, '盯住绝对词：all / not…any。写成「税太高应该降税」就偏题了。'),
-          q('t1-steps', '读题', '见题三步的正确顺序是？', ['理解意思 → 判断题型 → 确定是 A 还是 C', '判断题型 → 想例子 → 写开头', '找关键词 → 背模板 → 直接写', '先想观点 → 再读题'], 0, '先把题目意思读准（逐词直译最容易翻错），再判断题型，最后确定题目给了 A 还是 C，决定往哪个方向想。'),
           q('t1-pay', '读题', '为什么「pay tax = 交税」这种逐词直译容易出问题？', ['只对上了字面，没读出整句「全部收入都留着、一分不交」的意思', '因为 pay 不是「交」', '因为 tax 不可数', '没有问题'], 0, '翻译不准的三个习惯：常见词只记第一义、逐词直译、没盯绝对词。读题要读整句意思。'),
           q('t1-A', 'ABC', '这道题题目给出的 A（动作 / 做法）是？', ['所有人都不交税，挣的钱全留着', '政府没有钱', '经济增长变慢', '贫富差距扩大'], 0, 'A 是一个动作或做法。后三个都是它带来的结果（B 或 C），是你要自己想的。'),
           q('t1-should', 'ABC', '题目是 should，你反对「不交税」，主体段该怎么想？', ['从 A 往后想坏处', '从 C 往前想原因', '想不交税的好处', '写各国税率的对比'], 0, '要点 32：should 题确定了 A——支持就往后想好处，反对就往后想坏处。'),
@@ -37,6 +41,19 @@
           q('t1-offtopic', '段落', '范文第二段写到「消费税」，问题在哪？', ['跑题：消费税和「收入不交税」不是一回事', '词汇太简单', '句子太长', '没有问题'], 0, '题目说的是收入（the money they earn）不交税。范文也有坑：中心句太具体、学校→经济跳跃、消费税跑题。'),
           q('t1-len', '篇幅', '250 词大约要写多少句？', ['17–20 句（每句约 12 词）', '8–10 句', '30 句以上', '5 句'], 0, '按每句约 12 词估。你短句偏多，明天至少合并一组短句。'),
           q('t1-layers', '方法', '英语写作的三层，先抓哪层？', ['逻辑链（ABC）→ 句型 → 词块', '词块 → 句型 → 逻辑链', '只背范文', '先背高级词汇'], 0, '逻辑通了才有内容；句型决定句子结构；词块让表达地道。'),
+          /* --- 排序：把逻辑链排顺 --- */
+          o('t1-o1', '见题', '见题三步，按顺序点：', ['理解意思', '判断题型', '确定题目给的是 A 还是 C'], '先读准意思，再判断题型，最后决定往哪个方向想。'),
+          o('t1-o2', 'ABC', '书上的作业例子：A → B → C', ['做作业', '巩固学到的知识', '成绩更好'], 'A 是动作，B 是它直接带来的结果，C 是 B 再带来的结果。'),
+          o('t1-o3', 'ABC', '「不交税」的坏处链，按顺序点：', ['人们不交税', '政府没有税收收入', '修不了路、建不了学校', '经济受损'], '每一步都是新的事情，不是上一步换个说法。'),
+          o('t1-o4', '逻辑', '修路这条链，中间不能跳：', ['政府用税收修路', '人们上下班更方便', '工作更有效率', '促进经济增长'], 'travel to and from work easily → work more efficiently → contribute to economic growth'),
+          o('t1-o5', '逻辑', '学校这条链（范文在这里跳了一步）：', ['政府用税收建公立学校', '孩子获得知识和技能', '将来成为熟练工人', '促进经济增长'], '范文从「建学校」直接跳到「经济增长」，漏了中间两步。'),
+          o('t1-o6', '逻辑', '「因病致贫」这条链，补在第二个主体段段尾：', ['没人交税', '政府没钱提供免费医疗', '穷人生病时付不起医药费', '贫富差距越来越大'], '段尾补「为什么」，不要把中心句再说一遍。'),
+          o('t1-o7', '段落', '把第二个主体段排回原来的顺序：', ['Another reason why tax is necessary is that it can help people in need.', 'In many countries, people with high incomes have to pay higher taxes.', 'The government can use this money to support low-income families.', 'If nobody paid tax, poor people could not afford medical bills when they got ill.'], '中心句 → 钱从哪来 → 钱怎么用 → 没有它会怎样。'),
+          /* --- 配对 --- */
+          m('t1-m1', 'ABC', '题目 ↔ 它确定了什么', [['Students should do a lot of homework.', '确定 A：往后想结果'], ['In the future, teachers will give less homework.', '确定 C：往前想原因'], ['Doing more homework helps students find jobs.', '确定 A 和 C：想中间的 B']], '书 p.10 的三种情况。'),
+          m('t1-m2', '读题', '题目里的词 ↔ 它在这里的意思', [['keep', '留着'], ['state', '国家'], ['all the money they earn', '挣的全部收入'], ['not pay any tax', '一分税都不交']], '常见词别只记第一义；盯住 all / any 这类绝对词。'),
+          m('t1-m3', '改错', '错误写法 ↔ 改法', [['The government have …', 'The government has …'], ['Tax revenue are used …', 'Tax revenue is used …'], ['If nobody paid tax, they cannot …', 'If nobody paid tax, they could not …']], 'government 作单数；revenue 不可数；与事实相反的假设用 could。'),
+          m('t1-m4', '方法', '写作三层 ↔ 解决什么', [['逻辑链（ABC）', '写什么'], ['句型', '句子怎么搭'], ['词块', '空里填什么']], '先把逻辑理顺，再攒句型和词块。'),
           /* --- 语法判断 --- */
           q('t1-gov', '改错', '「The government have to help people in need.」哪里要改？', ['have → has', 'help → helps', 'people → peoples', '没有错'], 0, 'the government 在这里作单数，谓语用 has。'),
           q('t1-rev', '改错', '「Tax revenue are used to build schools.」哪里要改？', ['are → is（revenue 不可数）', 'used → use', 'build → building', '没有错'], 0, 'revenue 不可数，谓语用单数 is。'),
